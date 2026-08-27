@@ -1,0 +1,17 @@
+.DS_Store
+.idea/
+
+**/**repomix**
+**/*.zip
+
+# Models
+**/*.pb
+**/*.pbtxt
+**/*.caffemodel
+**/*.weights
+
+# Large source media
+resources/
+
+# Generated frame/output data
+scripts/outputs/
