@@ -1,10 +1,14 @@
 .DS_Store
 .idea/
+__pycache__/
+*.py[cod]
+.pytest_cache/
 
 **/**repomix**
 **/*.zip
 
 # Models
+models/
 **/*.pb
 **/*.pbtxt
 **/*.caffemodel
@@ -12,6 +16,8 @@
 
 # Large source media
 resources/
+data/
+third_party/
 
 # Generated frame/output data
 scripts/outputs/

@@ -5,7 +5,7 @@ If frames_manifest.csv exists in the image folder, source-frame and timestamp
 information from the manifest is included below each thumbnail.
 
 Example:
-    python build_frame_contact_sheet.py output_frames contact_sheet.jpg
+    python scripts/capture/build_frame_contact_sheet.py output_frames contact_sheet.jpg
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 """Extract frames from a video and write frame metadata to a CSV manifest.
 
 Example:
-    python extract_video_frames.py input.mp4 output_frames
+    python scripts/capture/video_frame_extraction.py input.mp4 output_frames
 
 By default, every decoded frame is saved. Use --every-n later when testing
 different frame-sampling intervals for COLMAP.

@@ -1,0 +1,12 @@
+name: pot-masking
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - numpy>=1.26,<3
+      - pillow>=10
+      - opencv-python>=4.8

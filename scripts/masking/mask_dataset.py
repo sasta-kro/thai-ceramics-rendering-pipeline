@@ -23,7 +23,7 @@ from typing import Any, Iterable, Sequence
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent
+PROJECT_ROOT = SCRIPT_DIR.parents[1]
 DEFAULT_CHECKPOINT = PROJECT_ROOT / "models" / "sam2.1_hiera_tiny.pt"
 DEFAULT_MODEL_CONFIG = "configs/sam2.1/sam2.1_hiera_t.yaml"
 GENERATED_DIRECTORIES = ("masks_object", "masks_colmap", "rgba", "overlays")
@@ -577,7 +577,7 @@ def command_process(args: argparse.Namespace) -> int:
     checkpoint = args.checkpoint.expanduser().resolve()
     if not checkpoint.is_file():
         raise FileNotFoundError(
-            f"SAM 2 checkpoint not found: {checkpoint}. See scripts/masking_readme.md."
+            f"SAM 2 checkpoint not found: {checkpoint}. See docs/masking.md."
         )
     try:
         import torch
@@ -585,7 +585,8 @@ def command_process(args: argparse.Namespace) -> int:
         from sam2.build_sam import build_sam2_video_predictor
     except Exception as error:
         raise RuntimeError(
-            "SAM 2 and PyTorch are required for process. Run `mask_dataset.py doctor`."
+            "SAM 2 and PyTorch are required for process. "
+            "Run `python scripts/masking/mask_dataset.py doctor`."
         ) from error
 
     device = choose_device(torch, args.device)

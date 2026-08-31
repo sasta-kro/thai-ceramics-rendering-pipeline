@@ -10,7 +10,7 @@ This is intended as a small photogrammetry/SfM progress-report demo:
 5. save a side-by-side visualization.
 
 Example:
-    python demo_feature_matching.py frame_000879.jpg frame_000882.jpg matches.jpg
+    python scripts/features/demo_feature_matching.py frame_000879.jpg frame_000882.jpg matches.jpg
 """
 
 from __future__ import annotations
