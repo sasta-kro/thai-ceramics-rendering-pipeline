@@ -2,10 +2,11 @@
 """Extract frames from a video and write frame metadata to a CSV manifest.
 
 Example:
-    python scripts/capture/video_frame_extraction.py input.mp4 output_frames
+    python scripts/capture/video_frame_extraction.py data/raw/videos/input.mp4
 
 By default, every decoded frame is saved. Use --every-n later when testing
-different frame-sampling intervals for COLMAP.
+different frame-sampling intervals for COLMAP. When no output directory is
+provided, frames are written to data/frames_output/<video-name>_frames.
 """
 
 from __future__ import annotations
@@ -17,6 +18,10 @@ from pathlib import Path
 import cv2
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_FRAMES_ROOT = PROJECT_ROOT / "data" / "frames_output"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Extract video frames as numbered image files."
@@ -26,7 +31,10 @@ def parse_args() -> argparse.Namespace:
         "output_dir",
         type=Path,
         nargs="?",
-        help="Output directory. Defaults to <video-name>_frames.",
+        help=(
+            "Output directory. Defaults to "
+            "data/frames_output/<video-name>_frames."
+        ),
     )
     parser.add_argument(
         "--every-n",
@@ -126,9 +134,7 @@ def ensure_output_is_safe(
 
 
 def extract_frames(args: argparse.Namespace) -> tuple[int, int, Path]:
-    output_dir = args.output_dir or args.video.with_name(
-        f"{args.video.stem}_frames"
-    )
+    output_dir = args.output_dir or DEFAULT_FRAMES_ROOT / f"{args.video.stem}_frames"
     output_dir = output_dir.resolve()
     manifest_path = output_dir / "frames_manifest.csv"
     extension = args.image_format

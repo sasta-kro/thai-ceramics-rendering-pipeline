@@ -25,10 +25,14 @@ micromamba activate pot-masking
 ## Main commands
 
 ```powershell
-python scripts/capture/video_frame_extraction.py INPUT_VIDEO OUTPUT_FRAMES --every-n 3
+python scripts/capture/video_frame_extraction.py INPUT_VIDEO --every-n 3
 python scripts/capture/build_frame_contact_sheet.py OUTPUT_FRAMES CONTACT_SHEET.jpg
 python scripts/features/demo_feature_matching.py FRAME_1.jpg FRAME_2.jpg MATCHES.jpg
 python scripts/masking/mask_dataset.py doctor
 ```
 
-See `docs/capture.md` and `docs/masking.md` for detailed usage.
+See `docs/capture.md` and `docs/masking.md` for detailed usage. The complete
+component map and data flow are documented in `docs/system-architecture.md`.
+
+When `OUTPUT_FRAMES` is omitted, frame extraction writes to
+`data/frames_output/<video-name>_frames` by default.

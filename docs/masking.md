@@ -69,16 +69,24 @@ negative point on the white turntable is recommended.
 
 ```powershell
 python scripts/masking/mask_dataset.py annotate `
-  data/interim/pot_unglazed_1_n3_frames `
-  data/processed/pot_unglazed_1_masks `
+  data/frames_output/pot1-unglazed_frames `
+  data/processed/pot1-unglazed `
   --material matte
 ```
 
 ```powershell
 python scripts/masking/mask_dataset.py annotate `
-  data/interim/pot2-glazed-n3_frames `
-  data/processed/pot2-glazed-masks `
+  data/frames_output/pot2-glazed_frames `
+  data/processed/pot2-glazed `
   --material glossy
+```
+
+The interactive preview is limited to 1200 by 800 pixels so it fits on a
+typical display while coordinates remain mapped to the original image. If the
+window is still too tall, lower its maximum height, for example:
+
+```powershell
+python scripts/masking/mask_dataset.py annotate data/frames_output/pot1-unglazed_every3_frames data/processed/pot1-unglazed_every3 --material matte --display-max-height 700
 ```
 
 For a machine without a GUI, supply original-image pixel coordinates.
@@ -103,7 +111,8 @@ python scripts/masking/mask_dataset.py annotate INPUT_FRAMES OUTPUT `
 ## 3. Generate masks and QC files
 
 ```powershell
-python scripts/masking/mask_dataset.py process INPUT_FRAMES OUTPUT --device auto
+python scripts/masking/mask_dataset.py process data/frames_output/pot1-unglazed_frames data/processed/pot1-unglazed --device auto
+python scripts/masking/mask_dataset.py process data/frames_output/pot2-glazed_frames data/processed/pot2-glazed --device auto
 ```
 
 The default run uses 120-frame chunks with an eight-frame overlap and erodes
@@ -128,13 +137,15 @@ The COLMAP input remains the original RGB frame directory. Pass
 Print a list of flagged frames without opening a window.
 
 ```powershell
-python scripts/masking/mask_dataset.py review INPUT_FRAMES OUTPUT --summary
+python scripts/masking/mask_dataset.py review data/frames_output/pot1-unglazed_frames data/processed/pot1-unglazed --summary
+python scripts/masking/mask_dataset.py review data/frames_output/pot2-glazed_frames data/processed/pot2-glazed --summary
 ```
 
 Open the interactive reviewer.
 
 ```powershell
-python scripts/masking/mask_dataset.py review INPUT_FRAMES OUTPUT
+python scripts/masking/mask_dataset.py review data/frames_output/pot1-unglazed_frames data/processed/pot1-unglazed
+python scripts/masking/mask_dataset.py review data/frames_output/pot2-glazed_frames data/processed/pot2-glazed
 ```
 
 Reviewer keys

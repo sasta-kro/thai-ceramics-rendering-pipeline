@@ -7,24 +7,31 @@ activated.
 micromamba activate pot-masking
 ```
 
-Extract every frame from a video.
+Extract every frame from both pot videos.
 
 ```powershell
-python scripts/capture/video_frame_extraction.py data/raw/videos/video-sample-2.mp4 data/interim/video-sample-2_frames
+python scripts/capture/video_frame_extraction.py data/raw/videos/pot1-unglazed.mp4
+python scripts/capture/video_frame_extraction.py data/raw/videos/pot2-glazed.mp4
 ```
 
-Extract every third frame.
+Alternatively, extract every third frame from both videos. Use `--overwrite`
+when replacing frames created by an earlier extraction run.
 
 ```powershell
-python scripts/capture/video_frame_extraction.py data/raw/videos/video-sample-2.mp4 data/interim/video-sample-2_frames --every-n 3 --overwrite
+python scripts/capture/video_frame_extraction.py data/raw/videos/pot1-unglazed.mp4 --every-n 3 --overwrite
+python scripts/capture/video_frame_extraction.py data/raw/videos/pot2-glazed.mp4 --every-n 3 --overwrite
 ```
 
-Create a labeled contact sheet from the extracted frames.
+Create a labeled contact sheet for each pot.
 
 ```powershell
-python scripts/capture/build_frame_contact_sheet.py data/interim/video-sample-2_frames data/results/video-sample-2_contact-sheet.jpg
+python scripts/capture/build_frame_contact_sheet.py data/frames_output/pot1-unglazed_frames data/processed/pot1-unglazed/frame_contact_sheet.jpg
+python scripts/capture/build_frame_contact_sheet.py data/frames_output/pot2-glazed_frames data/processed/pot2-glazed/frame_contact_sheet.jpg
 ```
 
-The extraction command writes `frames_manifest.csv` beside the frames. The
-contact-sheet command reads that manifest when available and includes the
-source frame number and timestamp in each tile.
+When no output directory is supplied, extraction writes the images and
+`frames_manifest.csv` to
+`data/frames_output/<video-name>_frames`. You can still pass an explicit output
+directory after the input video to override this default. The contact-sheet
+command reads the manifest when available and includes the source frame number
+and timestamp in each tile.

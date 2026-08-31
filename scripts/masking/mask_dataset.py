@@ -26,6 +26,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parents[1]
 DEFAULT_CHECKPOINT = PROJECT_ROOT / "models" / "sam2.1_hiera_tiny.pt"
 DEFAULT_MODEL_CONFIG = "configs/sam2.1/sam2.1_hiera_t.yaml"
+DEFAULT_ANNOTATION_DISPLAY_WIDTH = 1200
+DEFAULT_ANNOTATION_DISPLAY_HEIGHT = 800
 GENERATED_DIRECTORIES = ("masks_object", "masks_colmap", "rgba", "overlays")
 GENERATED_FILES = ("run_metadata.json", "mask_manifest.csv", "qc_contact_sheet.jpg")
 
@@ -87,6 +89,20 @@ def parse_args() -> argparse.Namespace:
         default=[],
         metavar=("X", "Y"),
         help="Optional background point, especially on the turntable. Repeat as needed.",
+    )
+    annotate.add_argument(
+        "--display-max-width",
+        type=int,
+        default=DEFAULT_ANNOTATION_DISPLAY_WIDTH,
+        metavar="PIXELS",
+        help="Maximum interactive preview width. Default: 1200.",
+    )
+    annotate.add_argument(
+        "--display-max-height",
+        type=int,
+        default=DEFAULT_ANNOTATION_DISPLAY_HEIGHT,
+        metavar="PIXELS",
+        help="Maximum interactive preview height. Default: 800.",
     )
     annotate.add_argument("--overwrite", action="store_true")
 
@@ -321,12 +337,25 @@ def resolve_frame(frames: Sequence[Any], selector: str) -> Any:
     return frames[index]
 
 
-def interactive_prompt(image: Any, title: str) -> tuple[list[float], list[tuple[float, float, int]]]:
+def annotation_display_scale(
+    width: int, height: int, max_width: int, max_height: int
+) -> float:
+    if max_width < 100 or max_height < 100:
+        raise ValueError("Annotation display dimensions must each be at least 100 pixels")
+    return min(1.0, max_width / width, max_height / height)
+
+
+def interactive_prompt(
+    image: Any,
+    title: str,
+    max_width: int,
+    max_height: int,
+) -> tuple[list[float], list[tuple[float, float, int]]]:
     import cv2
     import numpy as np
 
     height, width = image.shape[:2]
-    scale = min(1.0, 1280 / max(width, height))
+    scale = annotation_display_scale(width, height, max_width, max_height)
     display = cv2.resize(
         image,
         (max(1, round(width * scale)), max(1, round(height * scale))),
@@ -350,6 +379,7 @@ def interactive_prompt(image: Any, title: str) -> tuple[list[float], list[tuple[
             points.append((mouse_x / scale, mouse_y / scale, 0))
 
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, display.shape[1], display.shape[0])
     cv2.setMouseCallback(window, on_mouse)
     print(
         "Optional points: left-click the pot, right-click the turntable/background. "
@@ -441,7 +471,12 @@ def command_annotate(args: argparse.Namespace) -> int:
     if args.box:
         box = list(args.box)
     else:
-        box, gui_points = interactive_prompt(image, f"Pot annotation - {frame.filename}")
+        box, gui_points = interactive_prompt(
+            image,
+            f"Pot annotation - {frame.filename}",
+            args.display_max_width,
+            args.display_max_height,
+        )
         points.extend(gui_points)
 
     prompt = create_prompt(core, frame, box, points)

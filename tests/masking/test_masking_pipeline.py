@@ -77,6 +77,16 @@ class DatasetTests(unittest.TestCase):
 
 
 class PromptTests(unittest.TestCase):
+    def test_annotation_display_scale_fits_both_dimensions(self) -> None:
+        self.assertEqual(
+            mask_dataset.annotation_display_scale(800, 600, 1200, 800),
+            1.0,
+        )
+        self.assertAlmostEqual(
+            mask_dataset.annotation_display_scale(2160, 3840, 1200, 800),
+            800 / 3840,
+        )
+
     def test_prompt_coordinates_round_trip(self) -> None:
         box = [10, 20, 80, 90]
         normalized = core.normalized_box(box, 100, 200)
