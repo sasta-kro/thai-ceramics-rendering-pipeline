@@ -9,6 +9,8 @@ Thai pottery from video frames and photographs.
 - `scripts/features` demonstrates SIFT, FLANN, Lowe-ratio, and RANSAC matching.
 - `scripts/masking` annotates pots, propagates SAM 2 masks, exports COLMAP masks
   and RGBA images, and generates quality-control reports.
+- `scripts/reconstruction` runs validated, YAML-configured masked COLMAP sparse
+  reconstruction.
 - `tests/masking` verifies the masking pipeline without requiring a real SAM 2
   model during the automated run.
 - `docs` contains feature guides, weekly reports, and document templates.
@@ -29,10 +31,12 @@ python scripts/capture/video_frame_extraction.py INPUT_VIDEO --every-n 3
 python scripts/capture/build_frame_contact_sheet.py OUTPUT_FRAMES CONTACT_SHEET.jpg
 python scripts/features/demo_feature_matching.py FRAME_1.jpg FRAME_2.jpg MATCHES.jpg
 python scripts/masking/mask_dataset.py doctor
+python scripts/reconstruction/run_colmap.py --dry-run
 ```
 
-See `docs/capture.md` and `docs/masking.md` for detailed usage. The complete
-component map and data flow are documented in `docs/system-architecture.md`.
+See `docs/capture.md`, `docs/masking.md`, and `docs/colmap.md` for detailed
+usage. The complete component map and data flow are documented in
+`docs/system-architecture.md`.
 
 When `OUTPUT_FRAMES` is omitted, frame extraction writes to
 `data/frames_output/<video-name>_frames` by default.

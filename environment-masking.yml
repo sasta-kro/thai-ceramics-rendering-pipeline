@@ -10,3 +10,4 @@ dependencies:
       - numpy>=1.26,<3
       - pillow>=10
       - opencv-python>=4.8
+      - pyyaml>=6.0,<7

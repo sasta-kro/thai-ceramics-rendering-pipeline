@@ -1,0 +1,38 @@
+project:
+  name: pot1-unglazed_every6
+
+colmap:
+  executable: "C:/Tools/COLMAP-4.1.1/bin/colmap.exe"
+  use_gpu: true
+  camera_model: SIMPLE_RADIAL
+  single_camera: true
+
+input:
+  images: data/frames_output/pot1-unglazed_every6_frames
+  masks: data/processed/pot1-unglazed_every6/masks_colmap
+
+output:
+  # Completed exhaustive-matching baseline:
+  # workspace: data/processed/pot1-unglazed_every6/colmap_sparse_masked_exhaustion
+  workspace: data/processed/pot1-unglazed_every6/colmap_sparse_masked_sequential
+  database: database.db
+  sparse: sparse
+
+feature_extraction:
+  memory_profile: balanced_gpu
+  max_num_features: 8192
+  estimate_affine_shape: false
+  domain_size_pooling: false
+
+matching:
+  # Completed baseline:
+  # method: exhaustive
+  method: sequential
+  guided_matching: true
+  # Previous default:
+  # sequential_overlap: 10
+  sequential_overlap: 15
+
+postprocess:
+  analyze_models: true
+  export_ply: true
