@@ -1,0 +1,105 @@
+project:
+  name: pot1-unglazed_every6
+
+backend:
+  name: gsplat
+  environment: pot-3dgs
+
+colmap:
+  executable: "C:/Tools/COLMAP-4.1.1/bin/colmap.exe"
+
+input:
+  dataset: data/processed/pot1-unglazed_every6/colmap_dense_masked_sequential
+  images: images
+  masks: masks
+  sparse_model: sparse
+
+output:
+  workspace: data/processed/pot1-unglazed_every6/gaussian_splatting_masked_sequential
+  cache: cache
+  runs: runs
+  dataset_manifest: dataset_manifest.json
+  holdout_split: holdout_split.json
+
+evaluation:
+  holdout_every: 8
+  background_value: 0
+  alpha_threshold: 0.00392156862745098
+
+viewer:
+  port: 8080
+  max_gaussians: 500000
+  opacity_threshold: 0.005
+
+preparation:
+  output_format: PNG
+  rgb_resample: bicubic
+  mask_resample: lanczos
+  alpha_epsilon: 0.00392156862745098
+
+training:
+  strategy: mcmc
+  seed: 42
+  batch_size: 1
+  init_opacity: 0.1
+  init_scale: 1.0
+  means_lr: 0.00016
+  scales_lr: 0.005
+  opacities_lr: 0.05
+  quats_lr: 0.001
+  sh0_lr: 0.0025
+  shn_lr: 0.000125
+  ssim_lambda: 0.2
+  near_plane: 0.01
+  far_plane: 100.0
+  random_background: true
+  log_every: 10
+  preview_views: 3
+
+profiles:
+  smoke_lowmem:
+    image_factor: 4
+    max_steps: 300
+    max_gaussians: 100000
+    sh_degree: 1
+    packed: true
+    sparse_grad: true
+    sh_fp16: false
+    disable_viewer: true
+    sh_degree_interval: 100
+    refine_start_iter: 500
+    refine_stop_iter: 300
+    refine_every: 100
+
+  baseline_7k:
+    image_factor: 2
+    max_steps: 7000
+    max_gaussians: 500000
+    sh_degree: 2
+    packed: true
+    sparse_grad: true
+    sh_fp16: false
+    disable_viewer: true
+    sh_degree_interval: 1000
+    refine_start_iter: 500
+    refine_stop_iter: 6500
+    refine_every: 100
+
+  quality_15k:
+    image_factor: 2
+    max_steps: 15000
+    max_gaussians: 750000
+    sh_degree: 2
+    packed: true
+    sparse_grad: true
+    sh_fp16: false
+    disable_viewer: true
+    sh_degree_interval: 1000
+    refine_start_iter: 500
+    refine_stop_iter: 14000
+    refine_every: 100
+
+runtime:
+  user_runs_expensive_stages: true
+  refuse_existing_run: true
+  vram_warning_gb: 3.6

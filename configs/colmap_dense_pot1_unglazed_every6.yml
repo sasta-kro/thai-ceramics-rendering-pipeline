@@ -1,0 +1,57 @@
+project:
+  name: pot1-unglazed_every6
+
+colmap:
+  executable: "C:/Tools/COLMAP-4.1.1/bin/colmap.exe"
+
+input:
+  images: data/frames_output/pot1-unglazed_every6_frames
+  masks: data/processed/pot1-unglazed_every6/masks_colmap
+  sparse_model: data/processed/pot1-unglazed_every6/colmap_sparse_masked_sequential/sparse/0
+
+output:
+  workspace: data/processed/pot1-unglazed_every6/colmap_dense_masked_sequential
+  masked_images: inputs/masked_rgb
+  mask_undistortion_images: inputs/mask_images_for_undistortion
+  undistorted_images: images
+  undistorted_masks: masks
+  fused_point_cloud: results/fused.ply
+  poisson_mesh: results/meshed-poisson.ply
+  delaunay_mesh: results/meshed-delaunay.ply
+  textured_mesh: results/textured
+  logs: logs
+  run_manifest: run_manifest.json
+
+masking:
+  background_value: 0
+  threshold: 128
+  reconstruction_dilation_pixels: 5
+  fusion_erosion_pixels: 1
+  jpeg_quality: 100
+
+undistortion:
+  output_type: COLMAP
+  max_image_size: 2000
+  jpeg_quality: 100
+  num_threads: 2
+
+patch_match:
+  gpu_index: 0
+  max_image_size: 1600
+  cache_size_gb: 6
+  geom_consistency: true
+  filter: true
+
+fusion:
+  input_type: geometric
+  max_image_size: 1600
+  cache_size_gb: 6
+  min_num_pixels: 3
+
+meshing:
+  run_poisson: true
+  run_delaunay: true
+
+runtime:
+  resume: true
+  stop_on_error: true
