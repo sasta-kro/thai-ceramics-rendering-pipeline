@@ -1,229 +1,210 @@
 # System Architecture
 
-## 1. Purpose
+This document describes only the project folder structure and the function of
+each folder. The classical reconstruction branch is intentionally excluded.
 
-The Thai Ceramics Rendering Pipeline prepares photographs and video frames for
-image-based 3D reconstruction of Thai pottery. The current implementation
-covers dataset capture utilities, feature-matching experiments, foreground
-mask generation, and quality control.
-
-COLMAP reconstruction and 3D Gaussian Splatting are planned integration stages
-and are not yet implemented in this repository.
-
-## 2. High-Level Data Flow
-
-```mermaid
-flowchart LR
-    A[Pot video] --> B[Frame extraction]
-    B --> C[Frames and manifest]
-    C --> D[Contact sheet]
-    C --> E[SIFT feature matching]
-    C --> F[SAM 2 pot masking]
-    F --> G[Object masks]
-    F --> H[COLMAP masks]
-    F --> I[RGBA previews]
-    F --> J[QC manifest and contact sheet]
-    C --> K[COLMAP reconstruction - future]
-    H --> K
-    K --> L[Camera poses and sparse model - future]
-    L --> M[3D Gaussian Splatting - future]
-    M --> N[Novel-view renders - future]
-```
-
-## 3. Repository Structure
+## Repository Folder Structure
 
 ```text
 thai-ceramics-rendering-pipeline/
-├── README.md
-├── IMPORTANT_INFO.md
-├── environment-masking.yml
-├── data/                         # ignored by Git
+├── configs/
+│   └── gaussian_splatting_pot1_unglazed_every6.yml
+├── data/
 │   ├── raw/
-│   │   └── videos/               # original pot recordings
-│   ├── frames_output/            # extracted and selected video frames
-│   └── processed/                 # generated outputs grouped by pot
-│       ├── pot1-unglazed/
-│       └── pot2-glazed/
+│   ├── frames_output/
+│   └── processed/
 ├── docs/
 │   ├── capture.md
 │   ├── masking.md
+│   ├── gaussian_splatting.md
 │   ├── system-architecture.md
+│   ├── progress/
 │   ├── reports/
-│   │   ├── Computer Vision Project Paper Draft3 (w10).docx
-│   │   ├── CSX4213 ComputerVision Project Paper Draft1.docx
-│   │   ├── CSX4213 ComputerVision Project Paper Draft2.docx
-│   │   └── Draft2 Progress Update Copy-Paste Text.md
 │   └── templates/
-│       ├── CSX4213_1_2026_Template.docx
-│       └── conference-paper-template-a4.docx
+├── models/
 ├── scripts/
 │   ├── capture/
-│   │   ├── video_frame_extraction.py
-│   │   └── build_frame_contact_sheet.py
 │   ├── features/
-│   │   └── demo_feature_matching.py
-│   └── masking/
-│       ├── mask_dataset.py
-│       └── masking_core.py
-└── tests/
-    └── masking/
-        └── test_masking_pipeline.py
+│   ├── masking/
+│   └── gaussian_splatting/
+├── tests/
+│   ├── masking/
+│   └── gaussian_splatting/
+├── environment-masking.yml
+├── environment-3dgs.yml
+├── .gitignore
+├── IMPORTANT_INFO.md
+└── README.md
 ```
 
-Large datasets, model checkpoints, third-party repositories, and generated
-outputs are intentionally excluded from Git through `.gitignore`.
+## Top-Level Folder Functions
 
-## 4. Folder Responsibilities
-
-| Path | Responsibility |
+| Path | Function |
 | --- | --- |
-| `docs/` | Technical guides and system documentation. |
-| `docs/reports/` | Weekly reports, project-paper drafts, and progress text. |
-| `docs/templates/` | Original document templates used by the course. |
-| `data/raw/` | Original, unchanged videos and photographs. |
-| `data/frames_output/` | Frames extracted or selected from the original videos. |
-| `data/processed/` | Masking outputs organized into one directory per pot. |
-| `scripts/capture/` | Video-frame extraction, sampling, manifests, and contact sheets. |
-| `scripts/features/` | Local-feature detection, descriptor matching, and geometric verification experiments. |
-| `scripts/masking/` | Pot annotation, SAM 2 propagation, mask postprocessing, exports, and QC. |
-| `tests/masking/` | Automated tests for dataset discovery, prompts, mask cleanup, outputs, and chunk processing. |
-| `environment-masking.yml` | Reproducible Micromamba environment definition. |
+| `configs/` | Stores reproducible YAML settings for 3DGS dataset paths, preparation profiles, training profiles, evaluation, and export. |
+| `data/raw/` | Stores original source videos and photographs without modification. |
+| `data/frames_output/` | Stores frames extracted or selected from source videos. |
+| `data/processed/` | Stores masks, prepared 3DGS datasets, training runs, evaluations, and exports, grouped by ceramic object. |
+| `docs/` | Stores technical documentation, progress records, reports, and course templates. |
+| `models/` | Stores external model weights required by local processing, such as SAM 2 checkpoints. |
+| `scripts/capture/` | Extracts video frames and builds contact sheets for dataset review. |
+| `scripts/features/` | Contains standalone local-feature matching demonstrations and experiments. |
+| `scripts/masking/` | Creates and reviews object masks, transparent previews, and quality-control outputs. |
+| `scripts/gaussian_splatting/` | Validates, prepares, trains, evaluates, exports, and displays the 3D Gaussian Splatting model. |
+| `tests/masking/` | Tests mask processing, output generation, prompts, quality checks, and overwrite protection. |
+| `tests/gaussian_splatting/` | Tests 3DGS configuration, dataset preparation, training utilities, postprocessing, diagnostics, and command compatibility. |
+| `environment-masking.yml` | Defines the Micromamba environment used for SAM 2 masking. |
+| `environment-3dgs.yml` | Defines the low-memory PyTorch and gsplat environment used for 3DGS on the GTX 1650. |
 
-## 5. Implemented Components
-
-### 5.1 Capture
-
-`scripts/capture/video_frame_extraction.py` performs the following tasks:
-
-- Reads a source video with OpenCV.
-- Saves every frame or every Nth frame.
-- Defaults output to `data/frames_output/<video-name>_frames` when no output
-  directory is supplied.
-- Supports JPEG and PNG output.
-- Records source-frame numbers, timestamps, resolution, frame rate, and
-  sampling interval in `frames_manifest.csv`.
-- Protects existing outputs unless `--overwrite` is supplied.
-
-`scripts/capture/build_frame_contact_sheet.py` performs the following tasks:
-
-- Discovers and naturally sorts image files.
-- Reads `frames_manifest.csv` when available.
-- Creates labeled thumbnails for rapid dataset review.
-- Prevents unexpectedly large image canvases unless explicitly allowed.
-
-### 5.2 Feature Matching
-
-`scripts/features/demo_feature_matching.py` demonstrates the feature-matching
-stage used by photogrammetry systems:
-
-- Detects SIFT keypoints and descriptors.
-- Matches descriptors using FLANN.
-- Removes ambiguous matches with Lowe's ratio test.
-- Optionally rejects geometrically inconsistent matches using fundamental
-  matrix RANSAC.
-- Saves a side-by-side visualization of verified correspondences.
-
-This script is currently an experiment and is not yet connected to an
-automated COLMAP pipeline.
-
-### 5.3 Masking
-
-`scripts/masking/mask_dataset.py` is the masking command-line interface. It
-provides four commands:
-
-| Command | Purpose |
-| --- | --- |
-| `doctor` | Checks Python packages, hardware devices, SAM 2, and the checkpoint. |
-| `annotate` | Records an initial or corrective pot prompt. |
-| `process` | Propagates masks and produces all derived outputs. |
-| `review` | Reviews sampled or automatically flagged masks. |
-
-`scripts/masking/masking_core.py` contains reusable masking operations:
-
-- Frame and source-manifest discovery.
-- Prompt normalization and validation.
-- Temporary numeric frame staging for SAM 2.
-- Binary-mask validation and temporal component selection.
-- Hole filling, morphological cleanup, and COLMAP-mask erosion.
-- RGBA, overlay, manifest, and contact-sheet generation.
-- Sequence-level quality-control measurements and warnings.
-
-## 6. Masking Outputs
-
-A masking run creates the following structure inside its selected output
-directory:
+## Data Folder Structure
 
 ```text
-OUTPUT/
-├── prompts.json
-├── run_metadata.json
-├── mask_manifest.csv
-├── qc_contact_sheet.jpg
-├── masks_object/
-├── masks_colmap/
-├── rgba/
-└── overlays/
+data/
+├── raw/
+│   └── videos/
+│       └── pot1-unglazed.mp4
+├── frames_output/
+│   └── pot1-unglazed_every6_frames/
+│       ├── frame images
+│       └── frames_manifest.csv
+└── processed/
+    └── pot1-unglazed_every6/
+        ├── masks_object/
+        ├── masks_colmap/
+        ├── rgba/
+        ├── overlays/
+        ├── mask_manifest.csv
+        ├── run_metadata.json
+        ├── qc_contact_sheet.jpg
+        ├── colmap_dense_masked_sequential/
+        │   ├── images/
+        │   ├── masks/
+        │   └── sparse/
+        └── gaussian_splatting_masked_sequential/
+            ├── cache/
+            │   ├── factor_2/
+            │   └── factor_4/
+            ├── dataset_manifest.json
+            ├── holdout_split.json
+            └── runs/
+                ├── smoke_lowmem_retry1/
+                └── baseline_7k/
+                    ├── checkpoints/
+                    ├── evaluation/
+                    ├── exports/
+                    ├── previews/
+                    ├── training_log.csv
+                    └── training_summary.json
 ```
 
-| Output | Meaning |
+## Data Folder Functions
+
+| Path | Function |
 | --- | --- |
-| `masks_object/` | Full-resolution binary pot silhouettes. |
-| `masks_colmap/` | Slightly eroded masks named according to COLMAP's mask convention. |
-| `rgba/` | Original RGB pixels with the pot mask stored as alpha. |
-| `overlays/` | Reduced-size visual previews for manual inspection. |
-| `mask_manifest.csv` | Per-frame geometry, temporal consistency, file paths, and QC warnings. |
-| `run_metadata.json` | Runtime, hardware, checkpoint, dependency, and processing settings. |
-| `qc_contact_sheet.jpg` | Flagged frames and periodic samples for review. |
+| `data/raw/videos/` | Keeps the original ceramic videos as read-only source material. |
+| `data/frames_output/<dataset>/` | Contains sampled RGB frames and their extraction manifest. |
+| `masks_object/` | Contains full-resolution binary pot silhouettes. |
+| `masks_colmap/` | Contains slightly eroded masks using the required image-aligned naming convention. |
+| `rgba/` | Contains the original RGB pixels with the pot mask stored as transparency. |
+| `overlays/` | Contains lightweight visual previews for mask inspection. |
+| `mask_manifest.csv` | Records per-frame mask measurements, paths, and quality warnings. |
+| `run_metadata.json` | Records the masking environment, hardware, model, and processing settings. |
+| `qc_contact_sheet.jpg` | Shows sampled and flagged masks for rapid quality review. |
+| `colmap_dense_masked_sequential/images/` | Supplies the verified undistorted masked images used by 3DGS. |
+| `colmap_dense_masked_sequential/masks/` | Supplies masks aligned pixel-for-pixel with the undistorted images. |
+| `colmap_dense_masked_sequential/sparse/` | Supplies registered camera parameters, poses, and sparse initialization points. |
+| `gaussian_splatting_masked_sequential/cache/` | Stores reusable, mask-aware image caches at the resolution required by each training profile. |
+| `dataset_manifest.json` | Records source files, prepared profiles, image dimensions, and dataset metadata. |
+| `holdout_split.json` | Stores deterministic training and held-out evaluation image lists. |
+| `runs/<run-name>/checkpoints/` | Stores serialized 3DGS training checkpoints. |
+| `runs/<run-name>/evaluation/` | Stores held-out renders, comparisons, and quantitative metrics. |
+| `runs/<run-name>/exports/` | Stores portable PLY and SPLAT models, checksums, and the export manifest. |
+| `runs/<run-name>/previews/` | Stores selected reconstruction previews. |
+| `training_log.csv` | Stores step-level loss, quality, Gaussian-count, and memory measurements. |
+| `training_summary.json` | Stores final run settings, duration, loss, Gaussian count, and peak VRAM. |
 
-## 7. Runtime Architecture
+## Script Folder Structure
 
-The project uses the `pot-masking` Micromamba environment defined in
-`environment-masking.yml`. The base environment provides Python, NumPy,
-Pillow, and OpenCV. PyTorch, SAM 2, and the SAM 2.1 Hiera Tiny checkpoint are
-installed separately because their correct builds depend on the processing
-platform and GPU support.
-
-Device selection follows this order when `--device auto` is used:
-
-1. NVIDIA CUDA
-2. Apple MPS
-3. CPU
-
-The masking pipeline uses overlapping frame chunks to limit GPU and system
-memory use. Source frames are never renamed or overwritten.
-
-## 8. Testing
-
-`tests/masking/test_masking_pipeline.py` currently contains 13 tests covering:
-
-- Natural frame sorting and manifest preservation.
-- Image-dimension validation.
-- Prompt coordinate conversion and prompt storage.
-- Mask component selection, hole filling, and erosion.
-- RGB and alpha preservation.
-- COLMAP-compatible output naming.
-- QC warning thresholds.
-- Chunk overlap and overwrite protection.
-- A complete simulated masking run using a fake SAM 2 predictor.
-
-Run the suite from the repository root:
-
-```powershell
-python tests/masking/test_masking_pipeline.py
+```text
+scripts/
+├── capture/
+│   ├── video_frame_extraction.py
+│   └── build_frame_contact_sheet.py
+├── features/
+│   └── demo_feature_matching.py
+├── masking/
+│   ├── mask_dataset.py
+│   └── masking_core.py
+└── gaussian_splatting/
+    ├── cli/
+    │   ├── doctor.py
+    │   ├── validate.py
+    │   ├── prepare.py
+    │   ├── train.py
+    │   ├── evaluate.py
+    │   ├── export.py
+    │   └── view.py
+    ├── core/
+    │   └── common.py
+    ├── data/
+    │   ├── scene.py
+    │   └── preparation.py
+    ├── diagnostics/
+    │   ├── environment.py
+    │   └── dataset.py
+    ├── training/
+    │   └── runner.py
+    ├── postprocessing/
+    │   ├── checkpoint.py
+    │   ├── evaluation.py
+    │   ├── exporter.py
+    │   └── viewer.py
+    ├── environment_doctor.py
+    ├── validate_dataset.py
+    ├── prepare_dataset.py
+    ├── run_training.py
+    ├── evaluate_checkpoint.py
+    ├── export_checkpoint.py
+    └── view_checkpoint.py
 ```
 
-## 9. Planned Integration Points
+## Script Folder Functions
 
-The next architectural stages are:
+| Path | Function |
+| --- | --- |
+| `scripts/capture/video_frame_extraction.py` | Samples frames from a source video and records frame metadata. |
+| `scripts/capture/build_frame_contact_sheet.py` | Creates a labeled image sheet for quickly reviewing extracted frames. |
+| `scripts/features/demo_feature_matching.py` | Demonstrates SIFT detection, descriptor matching, and geometric verification. |
+| `scripts/masking/mask_dataset.py` | Provides the command-line interface for masking environment checks, annotation, processing, and review. |
+| `scripts/masking/masking_core.py` | Implements mask propagation, cleanup, export, manifest generation, and quality control. |
+| `scripts/gaussian_splatting/cli/` | Contains the organized `python -m` command entry points. |
+| `scripts/gaussian_splatting/core/` | Provides shared configuration loading, project paths, validation, and utility functions. |
+| `scripts/gaussian_splatting/data/` | Loads the prepared camera scene and creates mask-aware image caches and train/test splits. |
+| `scripts/gaussian_splatting/diagnostics/` | Checks the Python/CUDA/gsplat environment and validates the prepared dataset. |
+| `scripts/gaussian_splatting/training/` | Initializes Gaussians from sparse points and performs low-memory gsplat optimization. |
+| `scripts/gaussian_splatting/postprocessing/` | Loads checkpoints, evaluates held-out views, exports PLY/SPLAT files, and starts the local viewer. |
+| Top-level files in `scripts/gaussian_splatting/` | Preserve the original command paths as lightweight wrappers around the organized modules. |
 
-1. Add a controlled frame-selection stage after contact-sheet review.
-2. Run COLMAP feature extraction with the original RGB frames and
-   `masks_colmap` directory.
-3. Record registered cameras, sparse points, and reconstruction metrics.
-4. Convert the COLMAP result into the input format required by the selected
-   3D Gaussian Splatting implementation.
-5. Train the scene and generate novel-view renders.
-6. Evaluate withheld viewpoints and prepare the interactive presentation.
+## Test Folder Structure
 
-These stages should receive separate feature folders and tests only when their
-implementations are added.
+```text
+tests/
+├── masking/
+│   └── test_masking_pipeline.py
+└── gaussian_splatting/
+    ├── test_cli_compatibility.py
+    ├── test_common.py
+    ├── test_dataset.py
+    ├── test_environment_doctor.py
+    ├── test_postprocess.py
+    ├── test_prepare_dataset.py
+    └── test_run_training.py
+```
+
+## Test Folder Functions
+
+| Path | Function |
+| --- | --- |
+| `tests/masking/test_masking_pipeline.py` | Verifies the masking pipeline without requiring a live SAM 2 processing run. |
+| `tests/gaussian_splatting/test_cli_compatibility.py` | Confirms that the original commands and organized module commands call the same implementations. |
+| Other files in `tests/gaussian_splatting/` | Verify shared utilities, dataset handling, environment checks, preparation, training behavior, checkpoints, evaluation, export, and viewer helpers. |
