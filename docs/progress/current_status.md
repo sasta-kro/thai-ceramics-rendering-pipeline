@@ -702,5 +702,3 @@ Pending or optional stages:
 - Retraining and dedicated top/bottom evaluation
 - Optional surface-oriented 2DGS or SuGaR experiment
 - Optional SH-aware interactive viewer
-
-The immediate recommended next step is to preserve the successful v1 artifacts, then add a guarded factor-1 smoke profile and cache for the current dataset. This can quantify how much side detail is recoverable from the existing source images before committing to the multilevel v2 recapture.
