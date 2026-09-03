@@ -16,7 +16,7 @@ models/
 
 # Large source media
 resources/
-data/
+/data/
 third_party/
 
 # Generated frame/output data
