@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3D Gaussian Splatting Pipeline</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #ffffff;
+      color: #000000;
+      font-family: "Times New Roman", Times, serif;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px;
+      border-bottom: 1px solid #000000;
+    }
+
+    button {
+      padding: 8px 12px;
+      border: 1px solid #000000;
+      background: #ffffff;
+      color: #000000;
+      cursor: pointer;
+      font: 14px Arial, Helvetica, sans-serif;
+    }
+
+    button:hover { background: #eeeeee; }
+
+    .figure {
+      width: min(850px, 100%);
+      margin: 0 auto;
+    }
+
+    #pipeline-svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #ffffff;
+    }
+
+    @media print {
+      @page { size: A4 portrait; margin: 10mm; }
+      .toolbar { display: none; }
+      .figure { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar" aria-label="Export controls">
+    <button type="button" id="download-svg">Download SVG</button>
+    <button type="button" id="download-png">Download PNG</button>
+  </div>
+
+  <main class="figure">
+    <svg id="pipeline-svg" viewBox="0 0 850 1400" role="img" aria-labelledby="pipeline-title pipeline-description" xmlns="http://www.w3.org/2000/svg">
+      <title id="pipeline-title">3D Gaussian Splatting Pipeline</title>
+      <desc id="pipeline-description">A simple black-and-white pipeline running vertically from video input to checkpoint, evaluation, export, and viewer output.</desc>
+
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#000000"/>
+        </marker>
+        <style>
+          .heading { font: 700 36px "Times New Roman", Times, serif; fill: #000000; }
+          .label { font: 700 28px "Times New Roman", Times, serif; fill: #000000; text-anchor: middle; dominant-baseline: middle; }
+          .box { fill: #ffffff; stroke: #000000; stroke-width: 2; }
+          .connector { fill: none; stroke: #000000; stroke-width: 2; marker-end: url(#arrow); }
+        </style>
+      </defs>
+
+      <rect width="850" height="1400" fill="#ffffff"/>
+      <text x="425" y="55" class="heading" text-anchor="middle">3D Gaussian Splatting Pipeline</text>
+
+      <rect class="box" x="100" y="100" width="650" height="80"/>
+      <text class="label" x="425" y="140">Video</text>
+      <path class="connector" d="M 425 180 V 225"/>
+
+      <rect class="box" x="100" y="230" width="650" height="80"/>
+      <text class="label" x="425" y="270">Frame extraction</text>
+      <path class="connector" d="M 425 310 V 355"/>
+
+      <rect class="box" x="100" y="360" width="650" height="80"/>
+      <text class="label" x="425" y="400">SAM 2 segmentation</text>
+      <path class="connector" d="M 425 440 V 485"/>
+
+      <rect class="box" x="100" y="490" width="650" height="80"/>
+      <text class="label" x="425" y="530">Masked images and masks</text>
+      <path class="connector" d="M 425 570 V 615"/>
+
+      <rect class="box" x="100" y="620" width="650" height="80"/>
+      <text class="label" x="425" y="660">COLMAP reconstruction</text>
+      <path class="connector" d="M 425 700 V 745"/>
+
+      <rect class="box" x="100" y="750" width="650" height="80"/>
+      <text class="label" x="425" y="775">Undistorted images + camera poses</text>
+      <text class="label" x="425" y="807">+ sparse 3D points</text>
+      <path class="connector" d="M 425 830 V 875"/>
+
+      <rect class="box" x="100" y="880" width="650" height="80"/>
+      <text class="label" x="425" y="920">3DGS image preparation</text>
+      <path class="connector" d="M 425 960 V 1005"/>
+
+      <rect class="box" x="100" y="1010" width="650" height="80"/>
+      <text class="label" x="425" y="1050">3D Gaussian Splatting training</text>
+      <path class="connector" d="M 425 1090 V 1135"/>
+
+      <rect class="box" x="100" y="1140" width="650" height="80"/>
+      <text class="label" x="425" y="1165">Checkpoint, evaluation, export,</text>
+      <text class="label" x="425" y="1197">and viewer</text>
+    </svg>
+  </main>
+
+  <script>
+    const svg = document.getElementById('pipeline-svg');
+
+    function serializeSvg() {
+      const copy = svg.cloneNode(true);
+      copy.setAttribute('width', '850');
+      copy.setAttribute('height', '1400');
+      copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(copy);
+    }
+
+    function download(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    document.getElementById('download-svg').addEventListener('click', () => {
+      download(
+        new Blob([serializeSvg()], { type: 'image/svg+xml;charset=utf-8' }),
+        '3dgs-pipeline.svg'
+      );
+    });
+
+    document.getElementById('download-png').addEventListener('click', () => {
+      const source = new Blob([serializeSvg()], { type: 'image/svg+xml;charset=utf-8' });
+      const sourceUrl = URL.createObjectURL(source);
+      const image = new Image();
+
+      image.onload = () => {
+        const scale = 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = 850 * scale;
+        canvas.height = 1400 * scale;
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(sourceUrl);
+        canvas.toBlob((blob) => {
+          if (blob) download(blob, '3dgs-pipeline.png');
+        }, 'image/png');
+      };
+
+      image.src = sourceUrl;
+    });
+  </script>
+</body>
+</html>

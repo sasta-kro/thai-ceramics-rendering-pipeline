@@ -17,6 +17,7 @@ output:
   undistorted_masks: masks
   fused_point_cloud: results/fused.ply
   poisson_mesh: results/meshed-poisson.ply
+  simplified_poisson_mesh: results/meshed-poisson-simplified.ply
   delaunay_mesh: results/meshed-delaunay.ply
   textured_mesh: results/textured
   logs: logs
@@ -37,20 +38,44 @@ undistortion:
 
 patch_match:
   gpu_index: 0
-  max_image_size: 1600
+  max_image_size: 1200
   cache_size_gb: 6
+  num_threads: 2
   geom_consistency: true
   filter: true
 
 fusion:
   input_type: geometric
-  max_image_size: 1600
+  max_image_size: 1200
   cache_size_gb: 6
+  num_threads: 4
   min_num_pixels: 3
 
 meshing:
   run_poisson: true
   run_delaunay: true
+  poisson:
+    point_weight: 1.0
+    depth: 11
+    color: true
+    trim: 5.0
+    num_threads: 4
+  delaunay:
+    input_type: dense
+    max_proj_dist: 20.0
+    max_depth_dist: 0.05
+    visibility_sigma: 3.0
+    distance_sigma_factor: 1.0
+    quality_regularization: 1.0
+    max_side_length_factor: 25.0
+    max_side_length_percentile: 95.0
+    num_threads: 4
+  simplification:
+    target_face_ratio: 0.1
+    max_error: 0.0
+    boundary_weight: 1000.0
+    interpolate_colors: true
+    num_threads: 4
 
 runtime:
   resume: true
