@@ -530,6 +530,97 @@ class DenseColmapRunnerTests(unittest.TestCase):
             ):
                 run_colmap_dense.validate_simplified_mesh(mesh, 200)
 
+    def test_texturing_settings_are_loaded(self) -> None:
+        settings = run_colmap_dense.texturing_settings(
+            {
+                "texturing": {
+                    "output_type": "BIN",
+                    "min_cos_normal_angle": 0.1,
+                    "min_visible_vertices": 3,
+                    "view_selection_smoothing_iterations": 3,
+                    "atlas_patch_padding": 4,
+                    "inpaint_radius": 5,
+                    "apply_color_correction": True,
+                    "color_correction_regularization": 0.1,
+                    "texture_scale_factor": 1.0,
+                    "num_threads": 4,
+                }
+            }
+        )
+
+        self.assertEqual(settings.output_type, "BIN")
+        self.assertEqual(settings.min_cos_normal_angle, 0.1)
+        self.assertEqual(settings.min_visible_vertices, 3)
+        self.assertEqual(settings.atlas_patch_padding, 4)
+        self.assertTrue(settings.apply_color_correction)
+        self.assertEqual(settings.texture_scale_factor, 1.0)
+        self.assertEqual(settings.num_threads, 4)
+
+    def test_mesh_texturing_command_uses_simplified_poisson_mesh(self) -> None:
+        paths = SimpleNamespace(
+            colmap=Path("C:/Tools/COLMAP/bin/colmap.exe"),
+            workspace=Path("C:/Project/dense"),
+            simplified_poisson_mesh=Path(
+                "C:/Project/dense/results/meshed-poisson-simplified.ply"
+            ),
+            textured_mesh=Path("C:/Project/dense/results/textured"),
+        )
+        settings = run_colmap_dense.TexturingSettings(
+            output_type="BIN",
+            min_cos_normal_angle=0.1,
+            min_visible_vertices=3,
+            view_selection_smoothing_iterations=3,
+            atlas_patch_padding=4,
+            inpaint_radius=5,
+            apply_color_correction=True,
+            color_correction_regularization=0.1,
+            texture_scale_factor=1.0,
+            num_threads=4,
+        )
+
+        command = run_colmap_dense.build_mesh_texturing_arguments(paths, settings)
+
+        self.assertEqual(command[:2], [str(paths.colmap), "mesh_texturer"])
+        self.assertEqual(
+            command[command.index("--workspace_path") + 1], str(paths.workspace)
+        )
+        self.assertEqual(
+            command[command.index("--input_path") + 1],
+            str(paths.simplified_poisson_mesh),
+        )
+        self.assertEqual(
+            command[command.index("--output_path") + 1], str(paths.textured_mesh)
+        )
+        self.assertEqual(
+            command[command.index("--MeshTextureMapping.atlas_patch_padding") + 1],
+            "4",
+        )
+
+    def test_textured_output_requires_uv_mesh_and_png_atlas(self) -> None:
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "textured"
+            output.mkdir()
+            mesh = output / "mesh.ply"
+            mesh.write_bytes(
+                b"ply\nformat binary_little_endian 1.0\n"
+                b"comment TextureFile texture.png\n"
+                b"element vertex 3\nproperty float x\n"
+                b"element face 1\nproperty list uchar int vertex_indices\n"
+                b"property list uchar float texcoord\nend_header\n"
+            )
+            texture = Image.new("RGB", (16, 8), (120, 80, 40))
+            texture.save(output / "texture.png")
+            texture.close()
+            paths = SimpleNamespace(textured_mesh=output)
+
+            report = run_colmap_dense.validate_textured_output(paths, 1)
+
+            self.assertEqual(report.vertex_count, 3)
+            self.assertEqual(report.face_count, 1)
+            self.assertEqual((report.texture_width, report.texture_height), (16, 8))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,10 @@
+input_mesh: data/processed/pot1-unglazed_every6/colmap_dense_masked_sequential/results/meshed-poisson-simplified.ply
+support_cloud: data/processed/pot1-unglazed_every6/colmap_dense_masked_sequential/results/fused.ply
+output_directory: data/processed/pot1-unglazed_every6/colmap_dense_masked_sequential/results/cleaned_classical_candidate
+cleanup:
+  # Voxel width relative to the fused cloud bounding-box diagonal.
+  # Support includes the occupied voxel and its 26 immediate neighbors.
+  support_voxel_fraction: 0.003
+  minimum_component_faces: 100
+  # Stop before writing if cleanup removes more than this fraction.
+  maximum_removed_fraction: 0.15

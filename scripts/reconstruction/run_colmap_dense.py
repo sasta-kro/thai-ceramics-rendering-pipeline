@@ -219,6 +219,34 @@ class SimplificationReport:
     resumed: bool
 
 
+@dataclass(frozen=True)
+class TexturingSettings:
+    """Settings for calibrated multi-view texture-atlas generation."""
+
+    output_type: str
+    min_cos_normal_angle: float
+    min_visible_vertices: int
+    view_selection_smoothing_iterations: int
+    atlas_patch_padding: int
+    inpaint_radius: int
+    apply_color_correction: bool
+    color_correction_regularization: float
+    texture_scale_factor: float
+    num_threads: int
+
+
+@dataclass(frozen=True)
+class TexturingReport:
+    """Summary of a validated textured mesh and atlas."""
+
+    vertex_count: int
+    face_count: int
+    texture_width: int
+    texture_height: int
+    elapsed_seconds: float
+    resumed: bool
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -688,6 +716,7 @@ def validate_config_schema(config: Mapping[str, Any]) -> None:
     patch_match_config = section(config, "patch_match")
     fusion_config = section(config, "fusion")
     meshing_config = section(config, "meshing")
+    texturing_config = section(config, "texturing")
     runtime_config = section(config, "runtime")
 
     required_string(project_config, "name", "project")
@@ -836,6 +865,43 @@ def validate_config_schema(config: Mapping[str, Any]) -> None:
     optional_positive_int(
         simplification_config, "num_threads", "meshing.simplification", 4
     )
+
+    output_type = required_string(
+        texturing_config, "output_type", "texturing"
+    ).upper()
+    if output_type not in {"BIN", "TXT"}:
+        raise PipelineError("'texturing.output_type' must be 'BIN' or 'TXT'.")
+    min_cos_normal_angle = optional_nonnegative_number(
+        texturing_config, "min_cos_normal_angle", "texturing", 0.1
+    )
+    if min_cos_normal_angle > 1:
+        raise PipelineError("'texturing.min_cos_normal_angle' must not exceed 1.")
+    optional_positive_int(
+        texturing_config, "min_visible_vertices", "texturing", 3
+    )
+    optional_nonnegative_int(
+        texturing_config,
+        "view_selection_smoothing_iterations",
+        "texturing",
+        3,
+    )
+    optional_nonnegative_int(
+        texturing_config, "atlas_patch_padding", "texturing", 4
+    )
+    optional_nonnegative_int(texturing_config, "inpaint_radius", "texturing", 5)
+    optional_bool(
+        texturing_config, "apply_color_correction", "texturing", True
+    )
+    optional_positive_number(
+        texturing_config,
+        "color_correction_regularization",
+        "texturing",
+        0.1,
+    )
+    optional_positive_number(
+        texturing_config, "texture_scale_factor", "texturing", 1.0
+    )
+    optional_positive_int(texturing_config, "num_threads", "texturing", 4)
     optional_bool(runtime_config, "resume", "runtime", True)
     optional_bool(runtime_config, "stop_on_error", "runtime", True)
 
@@ -1029,6 +1095,50 @@ def mesh_simplification_settings(
         num_threads=optional_positive_int(
             values, "num_threads", "meshing.simplification", 4
         ),
+    )
+
+
+def texturing_settings(config: Mapping[str, Any]) -> TexturingSettings:
+    values = section(config, "texturing")
+    output_type = required_string(values, "output_type", "texturing").upper()
+    if output_type not in {"BIN", "TXT"}:
+        raise PipelineError("'texturing.output_type' must be 'BIN' or 'TXT'.")
+    min_cos_normal_angle = optional_nonnegative_number(
+        values, "min_cos_normal_angle", "texturing", 0.1
+    )
+    if min_cos_normal_angle > 1:
+        raise PipelineError("'texturing.min_cos_normal_angle' must not exceed 1.")
+    return TexturingSettings(
+        output_type=output_type,
+        min_cos_normal_angle=min_cos_normal_angle,
+        min_visible_vertices=optional_positive_int(
+            values, "min_visible_vertices", "texturing", 3
+        ),
+        view_selection_smoothing_iterations=optional_nonnegative_int(
+            values,
+            "view_selection_smoothing_iterations",
+            "texturing",
+            3,
+        ),
+        atlas_patch_padding=optional_nonnegative_int(
+            values, "atlas_patch_padding", "texturing", 4
+        ),
+        inpaint_radius=optional_nonnegative_int(
+            values, "inpaint_radius", "texturing", 5
+        ),
+        apply_color_correction=optional_bool(
+            values, "apply_color_correction", "texturing", True
+        ),
+        color_correction_regularization=optional_positive_number(
+            values,
+            "color_correction_regularization",
+            "texturing",
+            0.1,
+        ),
+        texture_scale_factor=optional_positive_number(
+            values, "texture_scale_factor", "texturing", 1.0
+        ),
+        num_threads=optional_positive_int(values, "num_threads", "texturing", 4),
     )
 
 
@@ -1667,16 +1777,24 @@ def ply_element_counts(path: Path) -> dict[str, int]:
     return counts
 
 
-def ply_vertex_properties(path: Path) -> set[str]:
+def ply_element_properties(path: Path, element_name: str) -> set[str]:
     properties: set[str] = set()
-    in_vertex_element = False
+    in_requested_element = False
     for line in ply_header_text(path).splitlines():
         fields = line.split()
         if len(fields) >= 2 and fields[0] == "element":
-            in_vertex_element = fields[1] == "vertex"
-        elif in_vertex_element and len(fields) >= 3 and fields[0] == "property":
+            in_requested_element = fields[1] == element_name
+        elif (
+            in_requested_element
+            and len(fields) >= 3
+            and fields[0] == "property"
+        ):
             properties.add(fields[-1])
     return properties
+
+
+def ply_vertex_properties(path: Path) -> set[str]:
+    return ply_element_properties(path, "vertex")
 
 
 def ply_vertex_count(path: Path) -> int:
@@ -1998,6 +2116,154 @@ def run_mesh_simplification(
     )
 
 
+def textured_output_paths(paths: DensePaths) -> tuple[Path, Path]:
+    return paths.textured_mesh / "mesh.ply", paths.textured_mesh / "texture.png"
+
+
+def validate_texturing_readiness(paths: DensePaths) -> tuple[int, int, int]:
+    if not paths.colmap.is_file():
+        raise PipelineError(f"COLMAP executable was not found: {paths.colmap}")
+    _, original_faces = validate_simplification_readiness(paths)
+    input_vertices, input_faces = validate_simplified_mesh(
+        paths.simplified_poisson_mesh, original_faces
+    )
+    image_count = len(image_files(paths.undistorted_images))
+    if image_count == 0:
+        raise PipelineError(
+            f"No undistorted masked images were found: {paths.undistorted_images}"
+        )
+    if not undistorted_workspace_is_complete(paths, image_count):
+        raise PipelineError(
+            "The undistorted COLMAP workspace is incomplete and cannot be used "
+            "for texture mapping."
+        )
+    return image_count, input_vertices, input_faces
+
+
+def build_mesh_texturing_arguments(
+    paths: DensePaths, settings: TexturingSettings
+) -> list[str]:
+    return [
+        str(paths.colmap),
+        "mesh_texturer",
+        "--workspace_path",
+        str(paths.workspace),
+        "--input_path",
+        str(paths.simplified_poisson_mesh),
+        "--output_path",
+        str(paths.textured_mesh),
+        "--output_type",
+        settings.output_type,
+        "--MeshTextureMapping.min_cos_normal_angle",
+        str(settings.min_cos_normal_angle),
+        "--MeshTextureMapping.min_visible_vertices",
+        str(settings.min_visible_vertices),
+        "--MeshTextureMapping.view_selection_smoothing_iterations",
+        str(settings.view_selection_smoothing_iterations),
+        "--MeshTextureMapping.atlas_patch_padding",
+        str(settings.atlas_patch_padding),
+        "--MeshTextureMapping.inpaint_radius",
+        str(settings.inpaint_radius),
+        "--MeshTextureMapping.apply_color_correction",
+        colmap_bool(settings.apply_color_correction),
+        "--MeshTextureMapping.color_correction_regularization",
+        str(settings.color_correction_regularization),
+        "--MeshTextureMapping.num_threads",
+        str(settings.num_threads),
+        "--MeshTextureMapping.texture_scale_factor",
+        str(settings.texture_scale_factor),
+    ]
+
+
+def validate_textured_output(
+    paths: DensePaths, input_face_count: int
+) -> TexturingReport:
+    try:
+        from PIL import Image
+    except ModuleNotFoundError as error:
+        raise PipelineError(
+            "Pillow is required to validate the texture atlas. Update the "
+            "pot-masking environment from environment-masking.yml."
+        ) from error
+
+    mesh_path, texture_path = textured_output_paths(paths)
+    vertices, faces = ply_mesh_counts(mesh_path)
+    if faces != input_face_count:
+        raise PipelineError(
+            "Texturing unexpectedly changed the mesh face count: "
+            f"{faces} output faces versus {input_face_count} input faces."
+        )
+    face_properties = ply_element_properties(mesh_path, "face")
+    if "texcoord" not in face_properties:
+        raise PipelineError(
+            f"Textured mesh contains no per-face UV coordinates: {mesh_path}"
+        )
+    header = ply_header_text(mesh_path).lower()
+    if "texturefile texture.png" not in header:
+        raise PipelineError(
+            f"Textured mesh does not reference texture.png: {mesh_path}"
+        )
+    if not texture_path.is_file() or texture_path.stat().st_size == 0:
+        raise PipelineError(f"Texture atlas was not found or is empty: {texture_path}")
+    try:
+        with Image.open(texture_path) as texture:
+            if texture.format != "PNG":
+                raise PipelineError(
+                    f"Texture atlas is not a PNG image: {texture_path}"
+                )
+            width, height = texture.size
+            if width <= 0 or height <= 0:
+                raise PipelineError(f"Texture atlas has invalid dimensions: {texture_path}")
+            texture.verify()
+    except OSError as error:
+        raise PipelineError(f"Unreadable texture atlas {texture_path}: {error}") from error
+    return TexturingReport(
+        vertex_count=vertices,
+        face_count=faces,
+        texture_width=width,
+        texture_height=height,
+        elapsed_seconds=0.0,
+        resumed=True,
+    )
+
+
+def run_mesh_texturing(
+    paths: DensePaths, settings: TexturingSettings, resume: bool
+) -> TexturingReport:
+    _, _, input_faces = validate_texturing_readiness(paths)
+    if paths.textured_mesh.exists():
+        if not paths.textured_mesh.is_dir():
+            raise PipelineError(
+                f"Textured-mesh output path is not a directory: {paths.textured_mesh}"
+            )
+        existing_files = [
+            path for path in paths.textured_mesh.rglob("*") if path.is_file()
+        ]
+        if existing_files:
+            if resume:
+                return validate_textured_output(paths, input_faces)
+            raise PipelineError(
+                "Textured-mesh output directory already contains files while "
+                f"--no-resume is selected: {paths.textured_mesh}"
+            )
+
+    paths.textured_mesh.parent.mkdir(parents=True, exist_ok=True)
+    elapsed = run_colmap_logged(
+        build_mesh_texturing_arguments(paths, settings),
+        "Calibrated mesh texture mapping",
+        paths.logs / "08_mesh_texturing.log",
+    )
+    report = validate_textured_output(paths, input_faces)
+    return TexturingReport(
+        vertex_count=report.vertex_count,
+        face_count=report.face_count,
+        texture_width=report.texture_width,
+        texture_height=report.texture_height,
+        elapsed_seconds=elapsed,
+        resumed=False,
+    )
+
+
 def selected_stages(stage: str) -> tuple[str, ...]:
     if stage == "all":
         return PIPELINE_STAGES
@@ -2088,6 +2354,21 @@ def main() -> int:
                 "\n[Mesh simplification command]\n"
                 + display_command(
                     build_mesh_simplification_arguments(paths, settings)
+                )
+            )
+        elif args.stage == "texture":
+            image_count, input_vertices, input_faces = validate_texturing_readiness(
+                paths
+            )
+            print(f"Texture-source images: {image_count}")
+            print(
+                f"Texture-input mesh: {input_vertices} vertices, "
+                f"{input_faces} faces"
+            )
+            print(
+                "\n[Mesh texturing command]\n"
+                + display_command(
+                    build_mesh_texturing_arguments(paths, texturing_settings(config))
                 )
             )
         print("\nDry run complete. No files were created and COLMAP was not run.")
@@ -2196,6 +2477,33 @@ def main() -> int:
         print("\nPoisson mesh simplification complete.")
         return 0
 
+    if args.stage == "texture":
+        print("\n[Validate calibrated mesh-texturing inputs]")
+        image_count, input_vertices, input_faces = validate_texturing_readiness(paths)
+        print(f"Undistorted masked images ready: {image_count}")
+        print(f"Input mesh vertices: {input_vertices}")
+        print(f"Input mesh faces: {input_faces}")
+        report = run_mesh_texturing(
+            paths,
+            texturing_settings(config),
+            resume=resume,
+        )
+        if report.resumed:
+            print("Mesh texturing already complete; reused the validated output.")
+        else:
+            print(f"Mesh-texturing runtime: {report.elapsed_seconds / 60:.2f} minutes")
+        print(f"Textured mesh vertices: {report.vertex_count}")
+        print(f"Textured mesh faces: {report.face_count}")
+        print(
+            f"Texture atlas dimensions: {report.texture_width}x"
+            f"{report.texture_height}"
+        )
+        mesh_path, texture_path = textured_output_paths(paths)
+        print(f"Textured mesh: {mesh_path}")
+        print(f"Texture atlas: {texture_path}")
+        print("\nCalibrated mesh texturing complete.")
+        return 0
+
     if args.stage in {"validate", "prepare", "undistort"}:
         print("\n[Validate dense-reconstruction inputs]")
         report = validate_inputs(paths)
@@ -2251,9 +2559,9 @@ def main() -> int:
 
     raise PipelineError(
         "Only the 'validate', 'prepare', 'undistort', 'patch-match', 'fusion', "
-        "'mesh', 'delaunay-mesh', and 'simplify-mesh' execution stages are enabled "
-        "so far. Select one of those stages, or use --dry-run while texturing is "
-        "implemented."
+        "'mesh', 'delaunay-mesh', 'simplify-mesh', and 'texture' execution stages "
+        "are enabled. Select one named stage; the combined 'all' execution mode "
+        "is intentionally not enabled for this step-by-step workflow."
     )
 
 
