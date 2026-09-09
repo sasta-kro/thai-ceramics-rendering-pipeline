@@ -1,0 +1,18 @@
+project:
+  name: pot1-unglazed_multiview
+
+sources:
+  - name: side
+    images: data/frames_output/pot1-unglazed_every6_frames
+    masks: data/processed/pot1-unglazed_every6/masks_colmap
+  - name: top45
+    images: data/frames_output/pot1-unglazed_top_frames
+    masks: data/processed/pot1-unglazed_top/masks_colmap
+  - name: underside
+    images: data/frames_output/pot1-unglazed_underside_rotate_frames
+    masks: data/processed/pot1-unglazed_underside/masks_colmap
+
+output:
+  images: data/frames_output/pot1-unglazed_multiview_frames
+  masks: data/processed/pot1-unglazed_multiview/masks_colmap
+  manifest: data/processed/pot1-unglazed_multiview/dataset_manifest.csv

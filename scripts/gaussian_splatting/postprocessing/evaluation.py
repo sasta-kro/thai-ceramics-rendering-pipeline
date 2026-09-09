@@ -22,7 +22,7 @@ from ..core.common import (
     resolve_paths,
     section,
 )
-from ..data.scene import load_scene, load_view
+from ..data.scene import load_scene, load_view, resolution_text
 from .checkpoint import (
     checkpoint_settings,
     load_checkpoint_cpu,
@@ -74,7 +74,7 @@ def evaluate(args: argparse.Namespace) -> int:
     print("3DGS held-out evaluation plan")
     print(f"Run: {run.run_name}")
     print(f"Checkpoint: {run.checkpoint}")
-    print(f"Resolution: {scene.width}x{scene.height}")
+    print(f"Resolution(s): {resolution_text(scene.resolutions)}")
     print(f"Held-out images: {len(scene.test_records)}")
     print(f"Gaussians: {gaussian_count}")
     print(f"Output: {output_dir}")
@@ -173,7 +173,7 @@ def evaluate(args: argparse.Namespace) -> int:
         "checkpoint": str(run.checkpoint),
         "profile": asdict(settings),
         "held_out_images": len(rows),
-        "resolution": [scene.width, scene.height],
+        "resolutions": [list(value) for value in scene.resolutions],
         "gaussians": gaussian_count,
         "mean_psnr": mean([float(row["psnr"]) for row in rows]),
         "mean_ssim": mean([float(row["ssim"]) for row in rows]),

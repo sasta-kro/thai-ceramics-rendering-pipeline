@@ -1,0 +1,39 @@
+project:
+  name: pot1-unglazed_multiview
+
+colmap:
+  executable: "C:/Tools/COLMAP-4.1.1/bin/colmap.exe"
+  use_gpu: true
+  camera_model: SIMPLE_RADIAL
+  single_camera: true
+
+input:
+  images: data/frames_output/pot1-unglazed_multiview_frames
+  masks: data/processed/pot1-unglazed_multiview/masks_colmap
+  manifest: data/processed/pot1-unglazed_multiview/dataset_manifest.csv
+
+output:
+  workspace: data/processed/pot1-unglazed_multiview/colmap_sparse_masked_multiview
+  database: database.db
+  sparse: sparse
+  match_pairs: match_pairs.txt
+
+feature_extraction:
+  memory_profile: balanced_gpu
+  max_num_features: 8192
+  estimate_affine_shape: false
+  domain_size_pooling: false
+
+matching:
+  method: multisequence
+  guided_matching: true
+  sequential_overlap: 15
+  loop_closure: true
+  bridge_stride: 5
+  bridges:
+    - [side, top45]
+    - [side, underside]
+
+postprocess:
+  analyze_models: true
+  export_ply: true

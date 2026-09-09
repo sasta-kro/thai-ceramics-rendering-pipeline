@@ -37,8 +37,8 @@ class FactorPreparationReport:
     source_count: int
     written_count: int
     resumed_count: int
-    source_resolution: tuple[int, int]
-    target_resolution: tuple[int, int]
+    source_resolutions: tuple[tuple[int, int], ...]
+    target_resolutions: tuple[tuple[int, int], ...]
     cache_directory: str
 
 
@@ -233,8 +233,8 @@ def prepare_factor(
     entries: list[dict[str, Any]] = []
     written = 0
     resumed = 0
-    source_resolution: tuple[int, int] | None = None
-    destination_resolution: tuple[int, int] | None = None
+    source_resolutions: set[tuple[int, int]] = set()
+    destination_resolutions: set[tuple[int, int]] = set()
 
     for source_image in images:
         relative_source = source_image.relative_to(paths.images)
@@ -246,13 +246,8 @@ def prepare_factor(
         with Image.open(source_image) as opened:
             current_source_size = opened.size
         current_target_size = target_size(current_source_size, factor)
-        if source_resolution is None:
-            source_resolution = current_source_size
-            destination_resolution = current_target_size
-        elif current_source_size != source_resolution:
-            raise PipelineError(
-                "All source images must have the same resolution for this dataset."
-            )
+        source_resolutions.add(current_source_size)
+        destination_resolutions.add(current_target_size)
 
         if resume and prepared_pair_is_valid(
             output_image, output_mask, current_target_size
@@ -285,11 +280,16 @@ def prepare_factor(
                 "source_name": relative_source.as_posix(),
                 "image": output_image.relative_to(factor_root).as_posix(),
                 "mask": output_mask.relative_to(factor_root).as_posix(),
+                "source_resolution": list(current_source_size),
+                "target_resolution": list(current_target_size),
             }
         )
 
-    if source_resolution is None or destination_resolution is None:
+    if not source_resolutions or not destination_resolutions:
         raise PipelineError("No source images were available for preparation.")
+
+    sorted_source_resolutions = tuple(sorted(source_resolutions))
+    sorted_destination_resolutions = tuple(sorted(destination_resolutions))
 
     if not dry_run:
         atomic_write_json(
@@ -297,8 +297,10 @@ def prepare_factor(
                 "schema_version": 1,
                 "factor": factor,
                 "source_dataset": str(paths.dataset),
-                "source_resolution": list(source_resolution),
-                "target_resolution": list(destination_resolution),
+                "source_resolutions": [list(value) for value in sorted_source_resolutions],
+                "target_resolutions": [
+                    list(value) for value in sorted_destination_resolutions
+                ],
                 "image_count": len(entries),
                 "images": entries,
             },
@@ -310,8 +312,8 @@ def prepare_factor(
         source_count=len(images),
         written_count=written,
         resumed_count=resumed,
-        source_resolution=source_resolution,
-        target_resolution=destination_resolution,
+        source_resolutions=sorted_source_resolutions,
+        target_resolutions=sorted_destination_resolutions,
         cache_directory=str(factor_root),
     )
 
@@ -368,10 +370,15 @@ def main() -> int:
 
     print("3DGS image preparation " + ("dry run" if args.dry_run else "complete"))
     for report in reports:
+        source_text = ", ".join(
+            f"{width}x{height}" for width, height in report.source_resolutions
+        )
+        target_text = ", ".join(
+            f"{width}x{height}" for width, height in report.target_resolutions
+        )
         print(
-            f"Factor {report.factor}: {report.source_resolution[0]}x"
-            f"{report.source_resolution[1]} -> {report.target_resolution[0]}x"
-            f"{report.target_resolution[1]}, source {report.source_count}, "
+            f"Factor {report.factor}: {source_text} -> {target_text}, "
+            f"source {report.source_count}, "
             f"written {report.written_count}, resumed {report.resumed_count}"
         )
         print(f"  Cache: {report.cache_directory}")

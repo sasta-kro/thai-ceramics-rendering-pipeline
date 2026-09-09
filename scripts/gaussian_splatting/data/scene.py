@@ -26,12 +26,39 @@ class SceneData:
     factor: int
     width: int
     height: int
+    resolutions: tuple[tuple[int, int], ...]
     train_records: tuple[CameraRecord, ...]
     test_records: tuple[CameraRecord, ...]
     points: np.ndarray
     point_colors: np.ndarray
     normalization_center: np.ndarray
     normalization_scale: float
+
+
+def camera_model_name(camera: Any) -> str:
+    """Return a stable COLMAP camera-model name across pycolmap versions."""
+
+    return getattr(camera.model, "name", str(camera.model))
+
+
+def validate_undistorted_cameras(cameras: Any) -> None:
+    """Accept one or more cameras when every camera is undistorted PINHOLE."""
+
+    values = list(cameras.values()) if hasattr(cameras, "values") else list(cameras)
+    if not values:
+        raise PipelineError("The undistorted COLMAP model contains no cameras.")
+    unsupported = sorted(
+        {camera_model_name(camera) for camera in values if camera_model_name(camera) != "PINHOLE"}
+    )
+    if unsupported:
+        raise PipelineError(
+            "Undistorted 3DGS input must use only PINHOLE cameras, found: "
+            + ", ".join(unsupported)
+        )
+
+
+def resolution_text(resolutions: tuple[tuple[int, int], ...]) -> str:
+    return ", ".join(f"{width}x{height}" for width, height in resolutions)
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -102,10 +129,7 @@ def load_scene(paths: GaussianSplattingPaths, factor: int) -> SceneData:
         }
 
     reconstruction = pycolmap.Reconstruction(paths.sparse_model)
-    if len(reconstruction.cameras) != 1:
-        raise PipelineError(
-            f"Expected one shared COLMAP camera, found {len(reconstruction.cameras)}."
-        )
+    validate_undistorted_cameras(reconstruction.cameras)
 
     images = sorted(
         (image for image in reconstruction.images.values() if image.has_pose),
@@ -121,8 +145,7 @@ def load_scene(paths: GaussianSplattingPaths, factor: int) -> SceneData:
     intrinsics: list[np.ndarray] = []
     cached_paths: list[tuple[Path, Path]] = []
     source_names: list[str] = []
-    width = 0
-    height = 0
+    resolutions: set[tuple[int, int]] = set()
 
     for image in images:
         normalized_name = image.name.replace("\\", "/")
@@ -140,20 +163,12 @@ def load_scene(paths: GaussianSplattingPaths, factor: int) -> SceneData:
             if prepared_image.size != prepared_mask.size:
                 raise PipelineError(f"Prepared image/mask dimensions differ: {normalized_name}")
             current_width, current_height = prepared_image.size
-        if width == 0:
-            width, height = current_width, current_height
-        elif (current_width, current_height) != (width, height):
-            raise PipelineError("Prepared cache contains mixed image resolutions.")
+        resolutions.add((current_width, current_height))
 
         camera = reconstruction.cameras[image.camera_id]
-        model_name = getattr(camera.model, "name", str(camera.model))
-        if model_name != "PINHOLE":
-            raise PipelineError(
-                f"Undistorted 3DGS input must use PINHOLE cameras, found {model_name}."
-            )
         K = np.asarray(camera.calibration_matrix(), dtype=np.float64)
-        K[0, :] *= width / camera.width
-        K[1, :] *= height / camera.height
+        K[0, :] *= current_width / camera.width
+        K[1, :] *= current_height / camera.height
 
         worldtocamera = np.eye(4, dtype=np.float64)
         worldtocamera[:3, :4] = np.asarray(image.cam_from_world().matrix())
@@ -199,10 +214,15 @@ def load_scene(paths: GaussianSplattingPaths, factor: int) -> SceneData:
 
     train_records = tuple(record for record in records if record.name in train_set)
     test_records = tuple(record for record in records if record.name in test_set)
+    sorted_resolutions = tuple(sorted(resolutions))
+    if not sorted_resolutions:
+        raise PipelineError("Prepared cache contains no image resolutions.")
+    width, height = sorted_resolutions[0]
     return SceneData(
         factor=factor,
         width=width,
         height=height,
+        resolutions=sorted_resolutions,
         train_records=train_records,
         test_records=test_records,
         points=np.asarray(normalized_points, dtype=np.float32),

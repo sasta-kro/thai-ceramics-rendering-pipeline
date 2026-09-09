@@ -18,6 +18,7 @@ thai-ceramics-rendering-pipeline/
 │   ├── masking.md
 │   ├── gaussian_splatting.md
 │   ├── system-architecture.md
+│   ├── environments/
 │   ├── progress/
 │   ├── reports/
 │   └── templates/
@@ -32,6 +33,7 @@ thai-ceramics-rendering-pipeline/
 │   └── gaussian_splatting/
 ├── environment-masking.yml
 ├── environment-3dgs.yml
+├── environment-lightglue.yml
 ├── .gitignore
 ├── IMPORTANT_INFO.md
 └── README.md
@@ -46,6 +48,7 @@ thai-ceramics-rendering-pipeline/
 | `data/frames_output/` | Stores frames extracted or selected from source videos. |
 | `data/processed/` | Stores masks, prepared 3DGS datasets, training runs, evaluations, and exports, grouped by ceramic object. |
 | `docs/` | Stores technical documentation, progress records, reports, and course templates. |
+| `docs/environments/` | Documents creation, activation, verification, updates, and usage boundaries for every Micromamba environment. |
 | `models/` | Stores external model weights required by local processing, such as SAM 2 checkpoints. |
 | `scripts/capture/` | Extracts video frames and builds contact sheets for dataset review. |
 | `scripts/features/` | Contains standalone local-feature matching demonstrations and experiments. |
@@ -55,6 +58,7 @@ thai-ceramics-rendering-pipeline/
 | `tests/gaussian_splatting/` | Tests 3DGS configuration, dataset preparation, training utilities, postprocessing, diagnostics, and command compatibility. |
 | `environment-masking.yml` | Defines the Micromamba environment used for SAM 2 masking. |
 | `environment-3dgs.yml` | Defines the low-memory PyTorch and gsplat environment used for 3DGS on the GTX 1650. |
+| `environment-lightglue.yml` | Defines the isolated CUDA 12.8 runtime used by COLMAP SIFT-LightGlue matching. |
 
 ## Data Folder Structure
 

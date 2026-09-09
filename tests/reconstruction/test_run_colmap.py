@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import sys
 import tempfile
 import unittest
@@ -71,6 +72,97 @@ class ColmapRunnerTests(unittest.TestCase):
     def test_unknown_memory_profile_is_rejected(self) -> None:
         with self.assertRaises(run_colmap.PipelineError):
             run_colmap.feature_memory_profile({"memory_profile": "unlimited"})
+
+    def test_multisequence_pairs_connect_each_view_through_side(self) -> None:
+        sequences = {
+            "side": ["side_0.jpg", "side_1.jpg", "side_2.jpg", "side_3.jpg"],
+            "top45": ["top45_0.jpg", "top45_1.jpg", "top45_2.jpg"],
+            "underside": ["underside_0.jpg", "underside_1.jpg"],
+        }
+
+        plan = run_colmap.build_multisequence_pair_plan(
+            sequences,
+            sequential_overlap=1,
+            loop_closure=False,
+            bridge_stride=2,
+            bridges=[("side", "top45"), ("side", "underside")],
+        )
+
+        self.assertEqual(plan.within_sequence, 6)
+        self.assertEqual(plan.loop_closure, 0)
+        self.assertEqual(
+            dict(plan.bridge_counts),
+            {"side<->top45": 6, "side<->underside": 6},
+        )
+        self.assertEqual(len(plan.pairs), 18)
+        for left, right in plan.pairs:
+            self.assertFalse(
+                {left.split("_", 1)[0], right.split("_", 1)[0]}
+                == {"top45", "underside"}
+            )
+
+    def test_multisequence_loop_closes_each_capture_sequence(self) -> None:
+        plan = run_colmap.build_multisequence_pair_plan(
+            {
+                "side": ["side_0.jpg", "side_1.jpg", "side_2.jpg"],
+                "top45": ["top45_0.jpg", "top45_1.jpg", "top45_2.jpg"],
+            },
+            sequential_overlap=1,
+            loop_closure=True,
+            bridge_stride=3,
+            bridges=[("side", "top45")],
+        )
+
+        self.assertEqual(plan.within_sequence, 4)
+        self.assertEqual(plan.loop_closure, 2)
+        self.assertIn(("side_2.jpg", "side_0.jpg"), plan.pairs)
+        self.assertIn(("top45_2.jpg", "top45_0.jpg"), plan.pairs)
+
+    def test_manifest_must_describe_every_combined_image(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            images = root / "images"
+            images.mkdir()
+            image_paths = [images / "side_0.jpg", images / "top45_0.jpg"]
+            for path in image_paths:
+                path.write_bytes(b"image")
+            manifest = root / "manifest.csv"
+            with manifest.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=("view", "view_frame_index", "combined_filename"),
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "view": "side",
+                        "view_frame_index": 0,
+                        "combined_filename": "side_0.jpg",
+                    }
+                )
+
+            with self.assertRaisesRegex(
+                run_colmap.PipelineError, "manifest/image mismatch"
+            ):
+                run_colmap.load_multiview_sequences(
+                    manifest, image_paths, images
+                )
+
+    def test_explicit_pair_list_uses_colmap_pair_format(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pairs.txt"
+            run_colmap.write_pair_list(
+                path,
+                [("side_0.jpg", "top45_0.jpg"), ("side_1.jpg", "underside_1.jpg")],
+            )
+
+            self.assertEqual(
+                path.read_text(encoding="utf-8").splitlines(),
+                [
+                    "side_0.jpg top45_0.jpg",
+                    "side_1.jpg underside_1.jpg",
+                ],
+            )
 
     def test_execution_preserves_parenthesized_path_argument(self) -> None:
         image_path = "C:/Projects/CSX4213 (Computer Vision)/frames"

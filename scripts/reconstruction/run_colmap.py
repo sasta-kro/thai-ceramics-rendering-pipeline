@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import csv
+from dataclasses import dataclass
 import os
 from pathlib import Path
 import subprocess
@@ -44,6 +46,16 @@ FEATURE_MEMORY_PROFILES = {
 
 class PipelineError(RuntimeError):
     """A user-correctable configuration or pipeline error."""
+
+
+@dataclass(frozen=True)
+class PairPlan:
+    """Explicit COLMAP image-pair plan for multiple capture sequences."""
+
+    pairs: tuple[tuple[str, str], ...]
+    within_sequence: int
+    loop_closure: int
+    bridge_counts: tuple[tuple[str, int], ...]
 
 
 def parse_args() -> argparse.Namespace:
@@ -120,6 +132,36 @@ def optional_positive_int(
     return value
 
 
+def multisequence_bridges(values: Mapping[str, Any]) -> list[tuple[str, str]]:
+    raw_bridges = values.get("bridges")
+    if not isinstance(raw_bridges, list) or not raw_bridges:
+        raise PipelineError(
+            "'matching.bridges' must be a non-empty list for multisequence matching."
+        )
+    bridges: list[tuple[str, str]] = []
+    canonical: set[tuple[str, str]] = set()
+    for index, raw_bridge in enumerate(raw_bridges):
+        if (
+            not isinstance(raw_bridge, list)
+            or len(raw_bridge) != 2
+            or not all(isinstance(value, str) and value.strip() for value in raw_bridge)
+        ):
+            raise PipelineError(
+                f"matching.bridges[{index}] must contain exactly two view names."
+            )
+        left, right = (value.strip() for value in raw_bridge)
+        if left == right:
+            raise PipelineError(
+                f"matching.bridges[{index}] cannot connect a view to itself."
+            )
+        key = tuple(sorted((left, right)))
+        if key in canonical:
+            raise PipelineError(f"Duplicate multisequence bridge: {left}, {right}")
+        canonical.add(key)
+        bridges.append((left, right))
+    return bridges
+
+
 def feature_memory_profile(values: Mapping[str, Any]) -> tuple[str, Mapping[str, int]]:
     profile = values.get("memory_profile", "balanced_gpu")
     if not isinstance(profile, str):
@@ -193,6 +235,176 @@ def validate_masks(images: Iterable[Path], image_root: Path, mask_root: Path) ->
         )
 
 
+def load_multiview_sequences(
+    manifest_path: Path, images: Sequence[Path], image_root: Path
+) -> dict[str, list[str]]:
+    if not manifest_path.is_file():
+        raise PipelineError(f"Multiview dataset manifest was not found: {manifest_path}")
+    required_fields = {"view", "view_frame_index", "combined_filename"}
+    try:
+        with manifest_path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            fields = set(reader.fieldnames or [])
+            missing_fields = sorted(required_fields - fields)
+            if missing_fields:
+                raise PipelineError(
+                    "Multiview manifest is missing field(s): "
+                    + ", ".join(missing_fields)
+                )
+            rows = list(reader)
+    except OSError as error:
+        raise PipelineError(
+            f"Could not read multiview manifest {manifest_path}: {error}"
+        ) from error
+
+    expected_images = {
+        image.relative_to(image_root).as_posix() for image in images
+    }
+    manifest_images: set[str] = set()
+    indexed: dict[str, list[tuple[int, str]]] = {}
+    for row_number, row in enumerate(rows, start=2):
+        view = (row.get("view") or "").strip()
+        filename = (row.get("combined_filename") or "").strip()
+        if not view or any(character.isspace() for character in view):
+            raise PipelineError(f"Invalid view name in manifest row {row_number}.")
+        if (
+            not filename
+            or Path(filename).name != filename
+            or any(character.isspace() for character in filename)
+        ):
+            raise PipelineError(
+                f"Invalid combined filename in manifest row {row_number}: {filename!r}"
+            )
+        if filename in manifest_images:
+            raise PipelineError(f"Duplicate manifest image: {filename}")
+        try:
+            frame_index = int(row.get("view_frame_index", ""))
+        except ValueError as error:
+            raise PipelineError(
+                f"Invalid view_frame_index in manifest row {row_number}."
+            ) from error
+        if frame_index < 0:
+            raise PipelineError(
+                f"view_frame_index cannot be negative in manifest row {row_number}."
+            )
+        manifest_images.add(filename)
+        indexed.setdefault(view, []).append((frame_index, filename))
+
+    missing = sorted(expected_images - manifest_images)
+    extra = sorted(manifest_images - expected_images)
+    if missing or extra:
+        detail: list[str] = []
+        if missing:
+            detail.append(f"missing manifest images: {len(missing)}")
+        if extra:
+            detail.append(f"unexpected manifest images: {len(extra)}")
+        raise PipelineError("Multiview manifest/image mismatch: " + ", ".join(detail))
+
+    sequences: dict[str, list[str]] = {}
+    for view, entries in indexed.items():
+        entries.sort()
+        indices = [index for index, _ in entries]
+        expected_indices = list(range(len(entries)))
+        if indices != expected_indices:
+            raise PipelineError(
+                f"Manifest indices for view '{view}' must be contiguous from 0."
+            )
+        sequences[view] = [filename for _, filename in entries]
+    if len(sequences) < 2:
+        raise PipelineError("Multisequence matching requires at least two views.")
+    return sequences
+
+
+def anchor_filenames(sequence: Sequence[str], stride: int) -> list[str]:
+    anchors = list(sequence[::stride])
+    if sequence and anchors[-1] != sequence[-1]:
+        anchors.append(sequence[-1])
+    return anchors
+
+
+def build_multisequence_pair_plan(
+    sequences: Mapping[str, Sequence[str]],
+    *,
+    sequential_overlap: int,
+    loop_closure: bool,
+    bridge_stride: int,
+    bridges: Sequence[tuple[str, str]],
+) -> PairPlan:
+    if sequential_overlap <= 0:
+        raise PipelineError("Sequential overlap must be positive.")
+    if bridge_stride <= 0:
+        raise PipelineError("Bridge stride must be positive.")
+    unknown = sorted(
+        {
+            view
+            for bridge in bridges
+            for view in bridge
+            if view not in sequences
+        }
+    )
+    if unknown:
+        raise PipelineError(
+            "Multisequence bridge refers to unknown view(s): " + ", ".join(unknown)
+        )
+
+    pairs: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    counts: dict[str, int] = {
+        "within": 0,
+        "loop": 0,
+    }
+
+    def add_pair(left: str, right: str, category: str) -> None:
+        if left == right:
+            return
+        key = tuple(sorted((left, right)))
+        if key in seen:
+            return
+        seen.add(key)
+        pairs.append((left, right))
+        counts[category] = counts.get(category, 0) + 1
+
+    for sequence in sequences.values():
+        for left_index, left in enumerate(sequence):
+            stop = min(len(sequence), left_index + sequential_overlap + 1)
+            for right in sequence[left_index + 1 : stop]:
+                add_pair(left, right, "within")
+        if loop_closure and len(sequence) > sequential_overlap:
+            for left in sequence[-sequential_overlap:]:
+                for right in sequence[:sequential_overlap]:
+                    add_pair(left, right, "loop")
+
+    bridge_counts: list[tuple[str, int]] = []
+    for left_view, right_view in bridges:
+        label = f"{left_view}<->{right_view}"
+        before = len(pairs)
+        for left in anchor_filenames(sequences[left_view], bridge_stride):
+            for right in anchor_filenames(sequences[right_view], bridge_stride):
+                add_pair(left, right, label)
+        bridge_counts.append((label, len(pairs) - before))
+
+    if not pairs:
+        raise PipelineError("Multisequence matching produced no image pairs.")
+    return PairPlan(
+        pairs=tuple(pairs),
+        within_sequence=counts["within"],
+        loop_closure=counts["loop"],
+        bridge_counts=tuple(bridge_counts),
+    )
+
+
+def write_pair_list(path: Path, pairs: Sequence[tuple[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with path.open("x", encoding="utf-8", newline="\n") as handle:
+            for left, right in pairs:
+                handle.write(f"{left} {right}\n")
+    except FileExistsError as error:
+        raise PipelineError(f"COLMAP match-pair list already exists: {path}") from error
+    except OSError as error:
+        raise PipelineError(f"Could not write COLMAP match-pair list {path}: {error}") from error
+
+
 def bool_arg(value: bool) -> str:
     return "1" if value else "0"
 
@@ -240,7 +452,9 @@ def run_colmap(
         )
 
 
-def ensure_clean_output(database_path: Path, sparse_path: Path) -> None:
+def ensure_clean_output(
+    database_path: Path, sparse_path: Path, pair_list_path: Path | None = None
+) -> None:
     if database_path.exists():
         raise PipelineError(
             f"COLMAP database already exists: {database_path}\n"
@@ -249,6 +463,11 @@ def ensure_clean_output(database_path: Path, sparse_path: Path) -> None:
     if sparse_path.exists() and any(sparse_path.iterdir()):
         raise PipelineError(
             f"Sparse output directory is not empty: {sparse_path}\n"
+            "Move the existing workspace before starting a fresh run."
+        )
+    if pair_list_path is not None and pair_list_path.exists():
+        raise PipelineError(
+            f"COLMAP match-pair list already exists: {pair_list_path}\n"
             "Move the existing workspace before starting a fresh run."
         )
 
@@ -320,7 +539,6 @@ def main() -> int:
     if not images:
         raise PipelineError(f"No supported RGB images were found under: {images_path}")
     validate_masks(images, images_path, masks_path)
-    ensure_clean_output(database_path, sparse_path)
 
     max_num_features = optional_positive_int(
         extraction_config, "max_num_features", "feature_extraction", 8192
@@ -344,11 +562,41 @@ def main() -> int:
         matching_config, "guided_matching", "matching", True
     )
     matching_method = required_string(matching_config, "method", "matching").lower()
-    if matching_method not in {"exhaustive", "sequential"}:
-        raise PipelineError("'matching.method' must be 'exhaustive' or 'sequential'.")
+    if matching_method not in {"exhaustive", "sequential", "multisequence"}:
+        raise PipelineError(
+            "'matching.method' must be 'exhaustive', 'sequential', or "
+            "'multisequence'."
+        )
     sequential_overlap = optional_positive_int(
         matching_config, "sequential_overlap", "matching", 10
     )
+    pair_plan: PairPlan | None = None
+    pair_list_path: Path | None = None
+    if matching_method == "multisequence":
+        manifest_path = resolve_project_path(
+            required_string(input_config, "manifest", "input"), "input.manifest"
+        )
+        pair_list_path = resolve_output_child(
+            workspace_path,
+            required_string(output_config, "match_pairs", "output"),
+            "output.match_pairs",
+        )
+        bridge_stride = optional_positive_int(
+            matching_config, "bridge_stride", "matching", 5
+        )
+        loop_closure = optional_bool(
+            matching_config, "loop_closure", "matching", True
+        )
+        bridges = multisequence_bridges(matching_config)
+        sequences = load_multiview_sequences(manifest_path, images, images_path)
+        pair_plan = build_multisequence_pair_plan(
+            sequences,
+            sequential_overlap=sequential_overlap,
+            loop_closure=loop_closure,
+            bridge_stride=bridge_stride,
+            bridges=bridges,
+        )
+    ensure_clean_output(database_path, sparse_path, pair_list_path)
     analyze_models = optional_bool(
         postprocess_config, "analyze_models", "postprocess", True
     )
@@ -366,6 +614,13 @@ def main() -> int:
         f"{memory_profile} (max image {max_image_size}, first octave {first_octave}, "
         f"threads {extraction_threads})"
     )
+    print(f"Matching method: {matching_method}")
+    if pair_plan is not None:
+        print(f"Within-sequence pairs: {pair_plan.within_sequence}")
+        print(f"Loop-closure pairs: {pair_plan.loop_closure}")
+        for label, count in pair_plan.bridge_counts:
+            print(f"Bridge pairs {label}: {count}")
+        print(f"Total explicit pairs: {len(pair_plan.pairs)}")
 
     feature_arguments = [
         "feature_extractor",
@@ -395,15 +650,32 @@ def main() -> int:
         bool_arg(domain_size_pooling),
     ]
 
+    matcher_command = (
+        "matches_importer" if matching_method == "multisequence" else f"{matching_method}_matcher"
+    )
     matcher_arguments = [
-        f"{matching_method}_matcher",
+        matcher_command,
         "--database_path",
         str(database_path),
-        "--FeatureMatching.use_gpu",
-        bool_arg(use_gpu),
-        "--FeatureMatching.guided_matching",
-        bool_arg(guided_matching),
     ]
+    if matching_method == "multisequence":
+        assert pair_list_path is not None
+        matcher_arguments.extend(
+            [
+                "--match_list_path",
+                str(pair_list_path),
+                "--match_type",
+                "pairs",
+            ]
+        )
+    matcher_arguments.extend(
+        [
+            "--FeatureMatching.use_gpu",
+            bool_arg(use_gpu),
+            "--FeatureMatching.guided_matching",
+            bool_arg(guided_matching),
+        ]
+    )
     if matching_method == "sequential":
         matcher_arguments.extend(["--SequentialMatching.overlap", str(sequential_overlap)])
 
@@ -426,6 +698,11 @@ def main() -> int:
 
     workspace_path.mkdir(parents=True, exist_ok=True)
     sparse_path.mkdir(parents=True, exist_ok=True)
+
+    if pair_plan is not None:
+        assert pair_list_path is not None
+        write_pair_list(pair_list_path, pair_plan.pairs)
+        print(f"\nWrote explicit COLMAP pair list: {pair_list_path}")
 
     run_colmap(colmap_path, ["version"], "COLMAP version")
     run_colmap(colmap_path, feature_arguments, "Feature extraction")

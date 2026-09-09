@@ -33,7 +33,7 @@ from ..core.common import (
     resolve_paths,
     section,
 )
-from ..data.scene import SceneData, load_scene, load_view
+from ..data.scene import SceneData, load_scene, load_view, resolution_text
 
 
 SH_C0 = 0.28209479177387814
@@ -483,7 +483,7 @@ def main() -> int:
         print("3DGS training plan")
         print(f"Profile: {settings.profile_name}")
         print(f"Prepared factor: {settings.image_factor}")
-        print(f"Resolution: {scene.width}x{scene.height}")
+        print(f"Resolution(s): {resolution_text(scene.resolutions)}")
         print(f"Train/test images: {len(scene.train_records)}/{len(scene.test_records)}")
         print(f"COLMAP initialization points: {len(scene.points)}")
         print(f"Steps: {settings.max_steps}")

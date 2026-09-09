@@ -1,0 +1,35 @@
+project:
+  name: pot1-unglazed_multiview-lightglue
+
+colmap:
+  executable: "C:/Tools/COLMAP-4.1.1/bin/colmap.exe"
+
+runtime:
+  cuda_dll_directory: auto_pytorch
+  minimum_cuda_version: "12.8"
+  minimum_cudnn_version: 90500
+  required_cuda_dlls:
+    - cublas64_12.dll
+    - cublasLt64_12.dll
+    - cudart64_12.dll
+    - cudnn64_9.dll
+
+input:
+  database: data/processed/pot1-unglazed_multiview/colmap_sparse_masked_multiview_lightglue/database.db
+  match_pairs: data/processed/pot1-unglazed_multiview/colmap_sparse_masked_multiview_lightglue/bridge_pairs_lightglue.txt
+  manifest: data/processed/pot1-unglazed_multiview/dataset_manifest.csv
+
+output:
+  log: data/processed/pot1-unglazed_multiview/colmap_sparse_masked_multiview_lightglue/logs/lightglue_matching_retry1.log
+
+matching:
+  feature_type: SIFT_LIGHTGLUE
+  use_gpu: true
+  gpu_index: 0
+  num_threads: 1
+  max_num_matches: 4096
+  # COLMAP 4.1.1 aborts because guided matching is unsupported by LightGlue.
+  guided_matching: false
+  lightglue_min_score: 0.1
+  min_num_inliers: 15
+  expected_pair_count: 2688

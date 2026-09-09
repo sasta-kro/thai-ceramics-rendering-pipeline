@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -22,6 +23,7 @@ class PrepareDatasetTests(unittest.TestCase):
     def test_target_size_matches_configured_factor(self) -> None:
         self.assertEqual(prepare_dataset.target_size((1125, 2000), 2), (562, 1000))
         self.assertEqual(prepare_dataset.target_size((1125, 2000), 4), (281, 500))
+        self.assertEqual(prepare_dataset.target_size((1116, 2000), 4), (279, 500))
 
     def test_holdout_split_is_deterministic_for_ordered_images(self) -> None:
         names = [f"frame_{index:03d}.jpg" for index in range(10)]
@@ -30,6 +32,42 @@ class PrepareDatasetTests(unittest.TestCase):
         self.assertEqual(split["test"], [names[0], names[4], names[8]])
         self.assertEqual(split["train_count"], 7)
         self.assertEqual(split["test_count"], 3)
+
+    def test_prepare_factor_accepts_multiple_source_resolutions(self) -> None:
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            images_root = root / "images"
+            images_root.mkdir()
+            first = images_root / "side.jpg"
+            second = images_root / "underside.jpg"
+            Image.new("RGB", (12, 20), "black").save(first)
+            Image.new("RGB", (10, 20), "black").save(second)
+            paths = SimpleNamespace(
+                images=images_root,
+                masks=root / "masks",
+                cache=root / "cache",
+                dataset=root,
+            )
+            settings = {
+                "rgb_resample": "bicubic",
+                "mask_resample": "lanczos",
+                "alpha_epsilon": 1 / 255,
+                "output_format": "PNG",
+            }
+
+            report = prepare_dataset.prepare_factor(
+                paths,
+                [first, second],
+                factor=2,
+                settings=settings,
+                resume=False,
+                dry_run=True,
+            )
+
+            self.assertEqual(report.source_resolutions, ((10, 20), (12, 20)))
+            self.assertEqual(report.target_resolutions, ((5, 10), (6, 10)))
 
     def test_alpha_aware_resize_preserves_foreground_color(self) -> None:
         import numpy as np
