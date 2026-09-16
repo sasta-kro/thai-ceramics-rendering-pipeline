@@ -1,0 +1,18 @@
+project:
+  name: pot1-unglazed-side-underside-mid25
+
+sources:
+  - name: side
+    images: data/frames_output/pot1-unglazed_every6_frames
+    masks: data/processed/pot1-unglazed_every6/masks_colmap
+  - name: mid25
+    images: data/frames_output/pot1-unglazed_intermediate25_frames
+    masks: data/processed/pot1-unglazed_intermediate25/masks_colmap
+  - name: underside
+    images: data/frames_output/pot1-unglazed_underside_rotate_frames
+    masks: data/processed/pot1-unglazed_underside/masks_colmap
+
+output:
+  images: data/frames_output/pot1-unglazed_side_underside_mid25_frames
+  masks: data/processed/pot1-unglazed_side_underside_mid25/masks_colmap
+  manifest: data/processed/pot1-unglazed_side_underside_mid25/dataset_manifest.csv
