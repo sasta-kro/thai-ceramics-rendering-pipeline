@@ -28,12 +28,6 @@
       font-size: 28px;
     }
 
-    .inputs {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 14px;
-    }
-
     .box {
       padding: 14px 16px;
       border: 2px solid #000000;
@@ -56,16 +50,6 @@
       color: #000000;
       font-size: 28px;
       font-weight: bold;
-    }
-
-    @media (max-width: 700px) {
-      .inputs {
-        grid-template-columns: 1fr;
-      }
-
-      .inputs .box:not(:last-child)::after {
-        content: "";
-      }
     }
 
     @media print {
@@ -94,11 +78,13 @@
   <main>
     <h1>Multiview 3D Gaussian Splatting Pipeline</h1>
 
-    <div class="inputs">
-      <div class="box">Existing side RGB<br>and masks</div>
-      <div class="box">New top-45&deg; RGB<br>and masks</div>
-      <div class="box">New underside RGB<br>and masks</div>
-    </div>
+    <div class="step box">Video frame extraction</div>
+
+    <div class="arrow" aria-hidden="true">&darr;</div>
+    <div class="step box">Foreground mask generation</div>
+
+    <div class="arrow" aria-hidden="true">&darr;</div>
+    <div class="step box">Multiview RGB images and masks</div>
 
     <div class="arrow" aria-hidden="true">&darr;</div>
     <div class="step box">Non-destructive multiview staging</div>

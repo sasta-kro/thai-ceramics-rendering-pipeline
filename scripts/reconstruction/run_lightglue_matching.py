@@ -356,8 +356,18 @@ def build_plan(config: Mapping[str, Any]) -> MatchingPlan:
             f"LightGlue log already exists; refusing to overwrite it: {log}"
         )
 
-    left_view = "side"
-    right_view = "top45"
+    left_view = (
+        required_string(matching, "left_view", "matching")
+        if "left_view" in matching
+        else "side"
+    )
+    right_view = (
+        required_string(matching, "right_view", "matching")
+        if "right_view" in matching
+        else "top45"
+    )
+    if left_view == right_view:
+        raise LightGlueRunnerError("Matching bridge views must be different.")
     filename_to_view = manifest_views(manifest)
     pairs = load_and_validate_pairs(
         pair_list, filename_to_view, left_view, right_view

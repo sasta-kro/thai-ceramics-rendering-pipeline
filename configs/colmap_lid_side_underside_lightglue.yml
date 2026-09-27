@@ -1,0 +1,36 @@
+project:
+  name: lid-side-underside-lightglue
+
+colmap:
+  executable: "C:/Tools/COLMAP-4.1.1/bin/colmap.exe"
+
+runtime:
+  cuda_dll_directory: auto_pytorch
+  minimum_cuda_version: "12.8"
+  minimum_cudnn_version: 90500
+  required_cuda_dlls:
+    - cublas64_12.dll
+    - cublasLt64_12.dll
+    - cudart64_12.dll
+    - cudnn64_9.dll
+
+input:
+  database: data/processed/lid_side_underside/colmap_sparse_masked_lightglue/database.db
+  match_pairs: data/processed/lid_side_underside/colmap_sparse_masked_lightglue/bridge_pairs_lightglue.txt
+  manifest: data/processed/lid_side_underside/dataset_manifest.csv
+
+output:
+  log: data/processed/lid_side_underside/colmap_sparse_masked_lightglue/logs/lightglue_matching.log
+
+matching:
+  left_view: side
+  right_view: underside
+  feature_type: SIFT_LIGHTGLUE
+  use_gpu: true
+  gpu_index: 0
+  num_threads: 1
+  max_num_matches: 4096
+  guided_matching: false
+  lightglue_min_score: 0.1
+  min_num_inliers: 15
+  expected_pair_count: 1848

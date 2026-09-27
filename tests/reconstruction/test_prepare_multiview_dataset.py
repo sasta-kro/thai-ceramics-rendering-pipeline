@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -108,6 +109,24 @@ class PrepareMultiviewDatasetTests(unittest.TestCase):
             finally:
                 staging.rmdir()
 
+    def test_publish_staged_output_copies_when_windows_rename_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory(dir=PROJECT_ROOT) as directory:
+            root = Path(directory)
+            staging = root / ".combined_images-test.tmp"
+            destination = root / "combined_images"
+            staging.mkdir()
+            (staging / "frame.jpg").write_bytes(b"complete staged output")
+
+            with mock.patch.object(multiview.os, "name", "nt"), mock.patch.object(
+                Path, "replace", side_effect=PermissionError(13, "Access is denied")
+            ):
+                multiview.publish_staged_output(staging, destination)
+
+            self.assertFalse(staging.exists())
+            self.assertEqual(
+                (destination / "frame.jpg").read_bytes(), b"complete staged output"
+            )
+
     def test_missing_mask_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory(dir=PROJECT_ROOT) as directory:
             root = Path(directory)
@@ -134,6 +153,40 @@ class PrepareMultiviewDatasetTests(unittest.TestCase):
                 multiview.DatasetPreparationError, "Dimension mismatch"
             ):
                 multiview.collect_pairs([source])
+
+    def test_explicit_exclusions_preserve_sources_and_skip_bad_pairs(self) -> None:
+        with tempfile.TemporaryDirectory(dir=PROJECT_ROOT) as directory:
+            root = Path(directory)
+            source = self.create_source(root, "side")
+            excluded = multiview.SourceSpec(
+                name=source.name,
+                images=source.images,
+                masks=source.masks,
+                exclude=("frame_000006.jpg",),
+            )
+
+            pairs = multiview.collect_pairs([excluded])
+
+            self.assertEqual(len(pairs), 1)
+            self.assertEqual(pairs[0].image.name, "frame_000000.jpg")
+            self.assertTrue((source.images / "frame_000006.jpg").is_file())
+            self.assertTrue((source.masks / "frame_000006.jpg.png").is_file())
+
+    def test_unknown_exclusion_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(dir=PROJECT_ROOT) as directory:
+            root = Path(directory)
+            source = self.create_source(root, "side")
+            excluded = multiview.SourceSpec(
+                name=source.name,
+                images=source.images,
+                masks=source.masks,
+                exclude=("missing.jpg",),
+            )
+
+            with self.assertRaisesRegex(
+                multiview.DatasetPreparationError, "were not found"
+            ):
+                multiview.collect_pairs([excluded])
 
     def test_existing_output_is_not_overwritten_by_default(self) -> None:
         with tempfile.TemporaryDirectory(dir=PROJECT_ROOT) as directory:

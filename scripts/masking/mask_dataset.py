@@ -123,6 +123,14 @@ def parse_args() -> argparse.Namespace:
     process.add_argument("--colmap-erosion", type=int, default=3, metavar="PIXELS")
     process.add_argument("--overlay-max-dimension", type=int, default=1280)
     process.add_argument("--qc-sample-stride", type=int, default=20)
+    process.add_argument(
+        "--preserve-holes",
+        action="store_true",
+        help=(
+            "Preserve enclosed background openings predicted by SAM instead of "
+            "filling them during mask cleanup."
+        ),
+    )
     process.add_argument("--overwrite", action="store_true")
 
     review = subparsers.add_parser("review", help="Review sampled and flagged masks.")
@@ -710,7 +718,10 @@ def command_process(args: argparse.Namespace) -> int:
                         f"SAM 2 returned no mask for frame {global_index} ({frame.filename})"
                     )
                 cleanup = core.postprocess_mask(
-                    raw_by_local[local_index], previous_clean, (frame.height, frame.width)
+                    raw_by_local[local_index],
+                    previous_clean,
+                    (frame.height, frame.width),
+                    preserve_holes=args.preserve_holes,
                 )
                 clean_mask = cleanup.mask
                 is_overlap = global_index in records_by_index
@@ -815,6 +826,7 @@ def command_process(args: argparse.Namespace) -> int:
         "chunk_size": args.chunk_size,
         "chunk_overlap": args.chunk_overlap,
         "colmap_erosion_pixels": args.colmap_erosion,
+        "preserve_holes": args.preserve_holes,
         "staging_methods": sorted(all_staging_methods),
         "rotation_loop_iou": loop_iou,
         "qc_contact_sheet_frames": contact_count,

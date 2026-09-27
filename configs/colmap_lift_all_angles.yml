@@ -1,0 +1,40 @@
+project:
+  name: lift-all-angles
+
+colmap:
+  executable: "C:/Tools/COLMAP-4.1.1/bin/colmap.exe"
+  use_gpu: true
+  camera_model: SIMPLE_RADIAL
+  single_camera: true
+
+input:
+  images: data/frames_output/lift_all_angles_frames
+  masks: data/processed/lift_all_angles/masks_colmap
+  manifest: data/processed/lift_all_angles/dataset_manifest.csv
+
+output:
+  workspace: data/processed/lift_all_angles/colmap_sparse_masked_multiview
+  database: database.db
+  sparse: sparse
+  match_pairs: match_pairs.txt
+
+feature_extraction:
+  memory_profile: balanced_gpu
+  max_num_features: 8192
+  estimate_affine_shape: false
+  domain_size_pooling: false
+
+matching:
+  method: multisequence
+  guided_matching: true
+  sequential_overlap: 15
+  loop_closure: true
+  bridge_stride: 5
+  bridges:
+    - [side, top45]
+    - [top45, up]
+    - [side, underside]
+
+postprocess:
+  analyze_models: true
+  export_ply: true

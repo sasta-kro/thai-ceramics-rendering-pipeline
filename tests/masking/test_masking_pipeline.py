@@ -141,6 +141,20 @@ class MaskTests(unittest.TestCase):
         self.assertEqual(int(result.mask[7, 7]), 0)
         self.assertGreater(result.cleanup_change_ratio, 0)
 
+    def test_postprocessing_can_preserve_structural_hole(self) -> None:
+        raw = np.zeros((100, 120), dtype=np.uint8)
+        raw[20:85, 30:95] = 255
+        raw[42:58, 52:68] = 0
+        raw[30:32, 40:42] = 0
+        raw[5:10, 5:10] = 255
+
+        result = core.postprocess_mask(raw, preserve_holes=True)
+
+        self.assertEqual(int(result.mask[50, 60]), 0)
+        self.assertEqual(int(result.mask[30, 40]), 255)
+        self.assertEqual(int(result.mask[7, 7]), 0)
+        self.assertEqual(int(result.mask[30, 40]), 255)
+
     def test_colmap_erosion_moves_boundary_inward(self) -> None:
         mask = np.zeros((20, 20), dtype=np.uint8)
         mask[3:17, 3:17] = 255

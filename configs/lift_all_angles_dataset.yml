@@ -1,0 +1,33 @@
+project:
+  name: lift-all-angles
+
+sources:
+  - name: side
+    images: data/frames_output/lift_side_frames
+    masks: data/processed/lift_side/masks_colmap
+    exclude:
+      - frame_000006.jpg
+  - name: top45
+    images: data/frames_output/lift_45_frames
+    masks: data/processed/lift_45/masks_colmap
+    exclude:
+      - frame_000006.jpg
+  - name: up
+    images: data/frames_output/lift_up_frames
+    masks: data/processed/lift_up/masks_colmap
+  - name: underside
+    images: data/frames_output/lift_underside_rotate_frames
+    masks: data/processed/lift_underside/masks_colmap
+    exclude:
+      - frame_000006.jpg
+      - frame_000228.jpg
+      - frame_000240.jpg
+      - frame_000252.jpg
+      - frame_000264.jpg
+      - frame_000276.jpg
+      - frame_000282.jpg
+
+output:
+  images: data/frames_output/lift_all_angles_frames
+  masks: data/processed/lift_all_angles/masks_colmap
+  manifest: data/processed/lift_all_angles/dataset_manifest.csv

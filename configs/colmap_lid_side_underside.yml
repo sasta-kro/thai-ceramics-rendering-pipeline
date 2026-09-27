@@ -1,0 +1,38 @@
+project:
+  name: lid-side-underside
+
+colmap:
+  executable: "C:/Tools/COLMAP-4.1.1/bin/colmap.exe"
+  use_gpu: true
+  camera_model: SIMPLE_RADIAL
+  single_camera: true
+
+input:
+  images: data/frames_output/lid_side_underside_frames
+  masks: data/processed/lid_side_underside/masks_colmap
+  manifest: data/processed/lid_side_underside/dataset_manifest.csv
+
+output:
+  workspace: data/processed/lid_side_underside/colmap_sparse_masked
+  database: database.db
+  sparse: sparse
+  match_pairs: match_pairs.txt
+
+feature_extraction:
+  memory_profile: balanced_gpu
+  max_num_features: 8192
+  estimate_affine_shape: false
+  domain_size_pooling: false
+
+matching:
+  method: multisequence
+  guided_matching: true
+  sequential_overlap: 15
+  loop_closure: true
+  bridge_stride: 5
+  bridges:
+    - [side, underside]
+
+postprocess:
+  analyze_models: true
+  export_ply: true

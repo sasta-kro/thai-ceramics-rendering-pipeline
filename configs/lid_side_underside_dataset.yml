@@ -1,0 +1,15 @@
+project:
+  name: lid-side-underside
+
+sources:
+  - name: side
+    images: data/frames_output/lid_side_frames
+    masks: data/processed/lid_side/masks_colmap
+  - name: underside
+    images: data/frames_output/lid_underside_rotate_frames
+    masks: data/processed/lid_underside/masks_colmap
+
+output:
+  images: data/frames_output/lid_side_underside_frames
+  masks: data/processed/lid_side_underside/masks_colmap
+  manifest: data/processed/lid_side_underside/dataset_manifest.csv

@@ -1,0 +1,12 @@
+project:
+  name: lid-side-only
+
+sources:
+  - name: side
+    images: data/frames_output/lid_side_frames
+    masks: data/processed/lid_side/masks_colmap
+
+output:
+  images: data/frames_output/lid_side_only_frames
+  masks: data/processed/lid_side_only/masks_colmap
+  manifest: data/processed/lid_side_only/dataset_manifest.csv

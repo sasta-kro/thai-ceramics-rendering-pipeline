@@ -59,6 +59,7 @@ class SourceSpec:
     name: str
     images: Path
     masks: Path
+    exclude: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -172,11 +173,28 @@ def config_paths(
             raise DatasetPreparationError(
                 f"sources[{index}] requires both images and masks paths."
             )
+        raw_exclude = raw_source.get("exclude", [])
+        if not isinstance(raw_exclude, list) or not all(
+            isinstance(value, str)
+            and value
+            and Path(value).name == value
+            and "/" not in value
+            and "\\" not in value
+            for value in raw_exclude
+        ):
+            raise DatasetPreparationError(
+                f"sources[{index}].exclude must be a list of plain filenames."
+            )
+        if len(set(raw_exclude)) != len(raw_exclude):
+            raise DatasetPreparationError(
+                f"sources[{index}].exclude contains duplicate filenames."
+            )
         sources.append(
             SourceSpec(
                 name=name,
                 images=resolve_project_path(raw_source["images"], f"{name}.images"),
                 masks=resolve_project_path(raw_source["masks"], f"{name}.masks"),
+                exclude=tuple(raw_exclude),
             )
         )
 
@@ -300,17 +318,31 @@ def collect_pairs(sources: list[SourceSpec]) -> list[FramePair]:
     common_size: tuple[int, int] | None = None
 
     for source in sources:
-        images = image_files(source.images)
+        all_images = image_files(source.images)
+        image_names = {image.name for image in all_images}
+        missing_exclusions = sorted(set(source.exclude) - image_names)
+        if missing_exclusions:
+            raise DatasetPreparationError(
+                f"{source.name} exclusion filename(s) were not found:\n"
+                + format_examples(missing_exclusions)
+            )
+        excluded = set(source.exclude)
+        images = [image for image in all_images if image.name not in excluded]
+        if not images:
+            raise DatasetPreparationError(
+                f"{source.name} exclusions removed every source image."
+            )
         if not source.masks.is_dir():
             raise DatasetPreparationError(f"Mask directory not found: {source.masks}")
         expected_names = {f"{image.name}.png" for image in images}
+        allowed_names = {f"{image.name}.png" for image in all_images}
         actual_names = {
             path.name
             for path in source.masks.iterdir()
             if path.is_file() and path.suffix.lower() == ".png"
         }
         missing = sorted(expected_names - actual_names)
-        extra = sorted(actual_names - expected_names)
+        extra = sorted(actual_names - allowed_names)
         if missing:
             raise DatasetPreparationError(
                 f"{source.name} is missing {len(missing)} COLMAP mask(s):\n"
@@ -424,6 +456,40 @@ def create_staging_directory(destination: Path) -> Path:
     )
 
 
+def publish_staged_output(staging: Path, destination: Path) -> None:
+    """Publish a completed staging path, tolerating OneDrive rename locks.
+
+    Windows OneDrive can briefly retain a handle for a directory that was just
+    removed during ``--overwrite``. In that state, ``os.replace`` fails with
+    WinError 5 even though the destination no longer exists. Copying the fully
+    prepared staging path into place avoids that directory-rename limitation.
+    """
+
+    try:
+        staging.replace(destination)
+        return
+    except PermissionError:
+        if os.name != "nt" or destination.exists():
+            raise
+
+    print(
+        f"Atomic rename was blocked by Windows; copying staged output to "
+        f"{destination}",
+        flush=True,
+    )
+    try:
+        if staging.is_dir():
+            shutil.copytree(staging, destination)
+            shutil.rmtree(staging)
+        else:
+            shutil.copy2(staging, destination)
+            staging.unlink()
+    except Exception:
+        if destination.exists():
+            safe_remove_generated(destination)
+        raise
+
+
 def write_staged_dataset(
     pairs: list[FramePair],
     output_images: Path,
@@ -478,9 +544,9 @@ def write_staged_dataset(
             for path in (output_images, output_masks, output_manifest):
                 if path.exists():
                     safe_remove_generated(path)
-        image_staging.replace(output_images)
-        mask_staging.replace(output_masks)
-        manifest_staging.replace(output_manifest)
+        publish_staged_output(image_staging, output_images)
+        publish_staged_output(mask_staging, output_masks)
+        publish_staged_output(manifest_staging, output_manifest)
     finally:
         if image_staging.exists():
             shutil.rmtree(image_staging)
@@ -531,6 +597,8 @@ def main() -> int:
     for source in sources:
         print(f"Source {source.name}: {source.images}")
         print(f"Masks  {source.name}: {source.masks}")
+        if source.exclude:
+            print(f"Exclude {source.name}: {len(source.exclude)} frame(s)")
     print(f"Combined images: {output_images}")
     print(f"Combined masks:  {output_masks}")
     print(f"Manifest:        {output_manifest}")

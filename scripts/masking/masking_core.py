@@ -340,12 +340,42 @@ def _fill_enclosed_holes(mask: np.ndarray) -> np.ndarray:
     return cv2.bitwise_or(mask, flooded)
 
 
+def _fill_small_enclosed_holes(mask: np.ndarray, max_area: int) -> np.ndarray:
+    """Fill small enclosed background components while retaining large openings."""
+
+    if max_area < 1:
+        return mask.copy()
+    background = np.where(mask == 0, 255, 0).astype(np.uint8)
+    count, labels, stats, _centroids = cv2.connectedComponentsWithStats(
+        background, connectivity=8
+    )
+    output = mask.copy()
+    height, width = mask.shape
+    for label in range(1, count):
+        x = int(stats[label, cv2.CC_STAT_LEFT])
+        y = int(stats[label, cv2.CC_STAT_TOP])
+        component_width = int(stats[label, cv2.CC_STAT_WIDTH])
+        component_height = int(stats[label, cv2.CC_STAT_HEIGHT])
+        area = int(stats[label, cv2.CC_STAT_AREA])
+        touches_boundary = (
+            x == 0
+            or y == 0
+            or x + component_width == width
+            or y + component_height == height
+        )
+        if not touches_boundary and area <= max_area:
+            output[labels == label] = 255
+    return output
+
+
 def postprocess_mask(
     raw_mask: np.ndarray,
     previous_mask: np.ndarray | None = None,
     shape: tuple[int, int] | None = None,
+    *,
+    preserve_holes: bool = False,
 ) -> MaskCleanupResult:
-    """Keep the tracked pot, close tiny gaps, and fill enclosed false holes."""
+    """Keep the tracked object and optionally preserve structural openings."""
 
     binary = ensure_binary_mask(raw_mask, shape)
     raw_area = int(np.count_nonzero(binary))
@@ -354,7 +384,11 @@ def postprocess_mask(
         selected = cv2.morphologyEx(
             selected, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8), iterations=1
         )
-        selected = _fill_enclosed_holes(selected)
+        if preserve_holes:
+            max_small_hole_area = max(16, round(selected.size * 0.0005))
+            selected = _fill_small_enclosed_holes(selected, max_small_hole_area)
+        else:
+            selected = _fill_enclosed_holes(selected)
     clean_area = int(np.count_nonzero(selected))
     changed = int(np.count_nonzero(cv2.bitwise_xor(binary, selected)))
     cleanup_ratio = changed / max(raw_area, 1)
